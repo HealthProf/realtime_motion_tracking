@@ -79,7 +79,14 @@ tests/unit/       Vitest
 tests/e2e/        Playwright smoke test
 ```
 
-## Licences
+## License and credit
 
-The pose models and runtime are from Google's MediaPipe (Apache 2.0). Segment parameters are from
-de Leva (1996). The anatomy layers are original schematic drawings generated in code.
+Free to use for educational purposes. Commercial use is not permitted, and any alteration needs the
+author's written approval. Credit is required: "Real-Time Motion Lab by HealthProf", with a link to
+this repository. See [LICENSE](LICENSE) for the full terms and how to request permission.
+
+This is a custom source-available license, not an open-source license.
+
+Third-party components (Google's MediaPipe runtime and pose models, Apache 2.0) keep their own
+licenses: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The anatomy layers are original
+schematic drawings generated in code.
