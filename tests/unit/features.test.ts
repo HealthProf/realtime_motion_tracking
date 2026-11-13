@@ -3,7 +3,7 @@ import { detectJumps, G } from '../../src/analysis/jump';
 import { detectReps, peakAbs, rangeOf, symmetryIndex } from '../../src/analysis/reps';
 import { residualAnalysis } from '../../src/analysis/residual';
 import { processTrial } from '../../src/capture/process';
-import { bodyYaw, classifyView, coachChecks } from '../../src/coach/coach';
+import { bodyYaw, classifyView, coachChecks, tiltFromOrientation } from '../../src/coach/coach';
 import { defaultCalibration } from '../../src/kinematics/calibration';
 import { FpsMeter, LiveEngine } from '../../src/live';
 import { L } from '../../src/pose/landmarks';
@@ -120,6 +120,16 @@ describe('setup coach', () => {
     oblique.world![L.l_shoulder].z = 0.19; oblique.world![L.r_shoulder].z = -0.19;
     oblique.world![L.l_hip].z = 0.12; oblique.world![L.r_hip].z = -0.12;
     expect(status(coachChecks(oblique), 'plane')).toBe('fail');
+  });
+});
+
+describe('device tilt', () => {
+  it('is zero when upright in portrait or landscape and grows with pitch and roll', () => {
+    expect(tiltFromOrientation(90, 0)).toBeCloseTo(0, 6);
+    expect(tiltFromOrientation(0, 90)).toBeCloseTo(0, 6);
+    expect(tiltFromOrientation(80, 0)).toBeCloseTo(10, 6);
+    expect(tiltFromOrientation(90, 7)).toBeCloseTo(0, 6); // gamma is degenerate when upright
+    expect(tiltFromOrientation(0, 0)).toBeCloseTo(90, 6); // flat on a table
   });
 });
 

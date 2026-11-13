@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Methods and limitations: Real-Time Motion Lab</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0b1220; color: #f1f5f9; font: 17px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid #33415a; padding-bottom: 0.2rem; }
+  a { color: #fbbf24; } code { background: #1b2640; padding: 0.1em 0.35em; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; } th, td { border-bottom: 1px solid #33415a; text-align: left; padding: 0.35rem 0.5rem; vertical-align: top; }
+  .note { border-left: 4px solid #fbbf24; background: #131c2e; padding: 0.6rem 0.9rem; }
+  :focus-visible { outline: 3px solid #fbbf24; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+<p><a href="./">&larr; Back to the app</a></p>
+<h1>Methods and limitations</h1>
+<p class="note">This is a teaching tool. It has not been validated against laboratory motion capture. Report its numbers as estimates and describe the setup you used.</p>
+
+<h2>What the app measures</h2>
+<p>A pose-estimation neural network (MediaPipe Pose Landmarker, BlazePose architecture; Bazarevsky et al., 2020) finds 33 body keypoints in each camera frame. Everything else is computed from those keypoints. Video never leaves your device.</p>
+<p>Keypoints are the model's estimate of where a joint appears in the image. They are not palpated anatomical landmarks or joint centres. The hip is typically the least certain, and the far-side limb in a side view is partly guessed while it is hidden.</p>
+
+<h2>The planar (2D) assumption</h2>
+<p>Angles and distances are measured in the image plane. They equal the true values only when the movement takes place in a plane perpendicular to the camera's line of sight. If a limb points toward or away from the camera, its projected angle is wrong and its projected length is too short. The setup coach warns when the body is turned obliquely, but it cannot correct the error.</p>
+<ul>
+<li>Use a side (sagittal) view for flexion and extension, and a front view for abduction and adduction.</li>
+<li>Place the camera level, at about hip height, far enough away that the whole movement stays in frame (3 to 4 m is typical). Greater distance reduces perspective distortion.</li>
+<li>Keep the subject near the centre of the picture, where lens distortion is smallest.</li>
+</ul>
+<p>The "3D (experimental)" angles use depth that the model infers from appearance. Depth is not measured, its error is not well characterised, and these values should not be treated as equivalent to the planar measurements.</p>
+
+<h2>Calibration</h2>
+<p>Angles need no calibration. Lengths, velocities and accelerations are in pixels until you calibrate. Clicking the two ends of an object of known length gives a scale that is valid only at that object's distance from the camera, so put it in the plane of motion. The standing-height option assumes eye level is 93.6 % of stature (Drillis &amp; Contini, 1966) and is less accurate; prefer a reference object for lab data.</p>
+<p>The coordinate system has x to the right and y upward, with the origin at the bottom-left of the picture unless you move it.</p>
+
+<h2>Timing</h2>
+<p>Each frame carries its own timestamp from the camera pipeline; the app does not assume a fixed frame rate. Webcams usually deliver 30 frames per second and slow down in dim light. Fast movements (throwing, kicking, sprinting, landings) are undersampled and blurred at these rates. The export header reports the median, minimum and maximum frame interval so you can judge timing quality.</p>
+
+<h2>Filtering and differentiation</h2>
+<table>
+<tr><th>Stage</th><th>Method</th></tr>
+<tr><td>Live display</td><td>One Euro filter (Casiez et al., 2012), a causal adaptive low-pass filter. Live values lag slightly and are labelled "live estimate".</td></tr>
+<tr><td>Trial export</td><td>Keypoints are resampled to a uniform time base by linear interpolation (gaps longer than 0.25 s are left empty), then low-pass filtered with a zero-phase 4th-order Butterworth filter (2nd order applied forward and backward, with the cutoff corrected for the double pass; Winter, 2009). Angles are computed from filtered coordinates.</td></tr>
+<tr><td>Velocity, acceleration</td><td>Central finite differences of the filtered data.</td></tr>
+</table>
+<p>The default cutoff is 6 Hz, a common choice for gait and other moderate-speed movements. It is a choice, not a fact: the "Suggest cutoff" button runs a residual analysis (Winter, 2009), and the "Why filtering matters" panel shows the consequences. <strong>Each differentiation amplifies noise.</strong> In this app's own tests with half a pixel of keypoint noise at 60 Hz, joint angle error was a fraction of a degree, angular velocity error was a few percent of peak, and angular acceleration error at a 6 Hz cutoff was a large fraction of peak for a slow squat. Treat acceleration as indicative unless the movement is slow, the frame rate is high and the cutoff is well chosen. Real keypoint noise is usually larger than in those tests.</p>
+
+<h2>Angle definitions</h2>
+<p>Joint angles are computed from three keypoints. "Included" is the geometric angle at the middle keypoint. "Anatomical" reports flexion as 180&deg; minus the included angle for the knee, hip and elbow (0&deg; is straight). The hip angle is the trunk-thigh angle (shoulder-hip-knee) and so includes pelvic and lumbar motion. The shoulder angle is the arm-trunk angle. The ankle angle uses the toe keypoint, whose neutral offset is approximate. Segment angles are measured counter-clockwise from the right horizontal; trunk lean is measured from vertical. The exact definition of every exported angle is written in the CSV header.</p>
+
+<h2>Centre of mass</h2>
+<p>The centre of mass is estimated by the segmental method with the mass fractions and segment centre-of-mass positions of de Leva (1996). The keypoints do not coincide with de Leva's segment endpoints, so three approximations are made: the head and neck centre of mass is placed at the midpoint of the ears; the trunk runs from mid-shoulder to mid-hip; the hand runs from wrist to index knuckle. A hidden limb segment is replaced by the opposite side, which is flagged in the export. The result is a model estimate for an average body.</p>
+
+<h2>Repetitions, symmetry and jump height</h2>
+<ul>
+<li><strong>Repetitions</strong> are excursions of at least 15&deg; away from and back to the resting angle, found with hysteresis thresholds and extended to the turning points.</li>
+<li><strong>Symmetry index</strong> = 100 &times; (left &minus; right) / mean(left, right) (Robinson et al., 1987). It is reported only for front views; in a side view the far limb is partly hidden and at a different distance from the camera.</li>
+<li><strong>Jump height from flight time</strong>: h = g t&sup2; / 8. This needs no calibration but assumes the body is in the same position at take-off and landing; landing with bent knees inflates it. Flight time is resolved to about one frame interval, which the results table converts to a height resolution (about &plusmn;4 cm at 30 frames per second for a 0.5 s flight). The centre-of-mass method is shown beside it for comparison.</li>
+</ul>
+
+<h2>Bone and muscle layers</h2>
+<p>The bone and muscle layers are a simplified schematic drawn from the tracked keypoints. They show the typical location of structures relative to the segments. They are not an image of the subject's anatomy, they cannot show rotation about a segment's long axis (for example forearm pronation), and they do not show which muscles are active. The "muscles crossing" highlight is a fixed anatomical lookup.</p>
+
+<h2>What published comparisons report</h2>
+<p>Based on articles retrieved from PubMed, studies comparing this family of models with marker-based motion capture report results that depend strongly on the joint, the task and the camera view:</p>
+<ul>
+<li>Hulleck et al. (2024) reported mean absolute errors of roughly 13&deg; to 16&deg; for the ankle angle during walking with BlazePose alone, improved by additional modelling. <a href="https://doi.org/10.1109/TNSRE.2024.3391908">doi:10.1109/TNSRE.2024.3391908</a></li>
+<li>Gao et al. (2025) found joint angle errors above 5&deg; in children with cerebral palsy and judged the method suitable for screening rather than diagnosis. <a href="https://doi.org/10.1109/EMBC58623.2025.11254531">doi:10.1109/EMBC58623.2025.11254531</a></li>
+<li>Hii et al. (2023) found good to excellent agreement for most temporal gait parameters. <a href="https://doi.org/10.3390/s23146489">doi:10.3390/s23146489</a></li>
+</ul>
+<p>These are examples, not a systematic review. The practical reading is that timing and large-range sagittal angles are the most trustworthy outputs, and small angles, distal joints and derivatives are the least.</p>
+
+<h2>Who the model works less well for</h2>
+<p>Pose models are trained on images of people and inherit the gaps in that data. Expect lower accuracy with loose or body-coloured clothing, long skirts or coats, unusual body positions, partial views, more than one person in frame, mobility aids and wheelchairs, prostheses and limb differences, and poor lighting or cluttered backgrounds. Low keypoint confidence is shown as grey dashed lines, and those values are excluded rather than guessed.</p>
+
+<h2>References</h2>
+<ul>
+<li>Bazarevsky, V., et al. (2020). BlazePose: On-device real-time body pose tracking. arXiv:2006.10204.</li>
+<li>Casiez, G., Roussel, N., &amp; Vogel, D. (2012). 1&euro; filter: A simple speed-based low-pass filter for noisy input in interactive systems. Proc. CHI 2012.</li>
+<li>de Leva, P. (1996). Adjustments to Zatsiorsky-Seluyanov's segment inertia parameters. Journal of Biomechanics, 29(9), 1223-1230.</li>
+<li>Drillis, R., &amp; Contini, R. (1966). Body segment parameters. Report 1166-03, New York University.</li>
+<li>Robinson, R. O., Herzog, W., &amp; Nigg, B. M. (1987). Use of force platform variables to quantify the effects of chiropractic manipulation on gait symmetry. Journal of Manipulative and Physiological Therapeutics, 10(4), 172-176.</li>
+<li>Winter, D. A. (2009). Biomechanics and Motor Control of Human Movement (4th ed.). Wiley.</li>
+</ul>
+</main>
+</body>
+</html>

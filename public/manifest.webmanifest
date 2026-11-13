@@ -1,0 +1,11 @@
+{
+  "name": "Real-Time Motion Lab",
+  "short_name": "Motion Lab",
+  "description": "Real-time markerless motion tracking and kinematic measurement for teaching biomechanics.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

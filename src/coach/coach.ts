@@ -82,3 +82,18 @@ export function coachChecks(i: CoachInput): Check[] {
   else add('level', 'Camera level', i.tiltDeg <= 3 ? 'pass' : i.tiltDeg <= 8 ? 'warn' : 'fail', `Camera is ${i.tiltDeg.toFixed(0)}° from level. A tilted camera rotates the vertical and horizontal axes of every measurement.`);
   return checks;
 }
+
+/**
+ * How far the device camera is from level, from DeviceOrientation angles (degrees).
+ * Combines pitch (camera axis above/below horizontal) and roll (rotation about the camera axis,
+ * measured from the nearest portrait/landscape orientation) and returns the larger of the two.
+ */
+export function tiltFromOrientation(beta: number, gamma: number): number {
+  const b = (beta * Math.PI) / 180, g = (gamma * Math.PI) / 180;
+  // Gravity direction in device coordinates (x right, y up the screen, z out of the screen).
+  const gx = Math.cos(b) * Math.sin(g), gy = -Math.sin(b), gz = -Math.cos(b) * Math.cos(g);
+  const pitch = (Math.asin(Math.min(1, Math.abs(gz))) * 180) / Math.PI;
+  const rollRaw = (Math.atan2(gx, -gy) * 180) / Math.PI;
+  const roll = Math.abs(rollRaw - Math.round(rollRaw / 90) * 90);
+  return Math.max(pitch, Math.hypot(gx, gy) < 0.2 ? 0 : roll);
+}
