@@ -82,8 +82,8 @@ tests/e2e/        Playwright smoke test
 ## License and credit
 
 Free to use for educational purposes. Commercial use is not permitted, and any alteration needs the
-author's written approval. Credit is required: "Real-Time Motion Lab by HealthProf", with a link to
-this repository. See [LICENSE](LICENSE) for the full terms and how to request permission.
+author's written approval. Credit is required: "Real-Time Motion Lab by Timothy Curry", with a link to
+this repository. See [LICENSE](LICENSE) for the full terms. To request permission, message Timothy Curry on LinkedIn.
 
 This is a custom source-available license, not an open-source license.
 

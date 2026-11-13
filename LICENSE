@@ -1,8 +1,8 @@
 Real-Time Motion Lab Educational Non-Commercial License
 Version 1.0
 
-Copyright (c) 2026 HealthProf (https://github.com/HealthProf). All rights reserved
-except as expressly granted below.
+Copyright (c) 2026 Timothy Curry. All rights reserved except as expressly
+granted below.
 
 1. Definitions
 
@@ -59,7 +59,7 @@ your own data from it, is not Modifying it.
 Any copy, public deployment, or approved Modified version of the Software
 must keep this License and all copyright notices, and must display the credit:
 
-    Real-Time Motion Lab by HealthProf
+    Real-Time Motion Lab by Timothy Curry
     https://github.com/HealthProf/realtime_motion_tracking
 
 If you present or publish results, figures, screenshots, or video produced
@@ -71,10 +71,8 @@ You may not suggest that the Licensor endorses you or your use.
 6. Requesting permission
 
 Requests for commercial use, or for approval to Modify the Software, should be
-made by opening an issue at
-https://github.com/HealthProf/realtime_motion_tracking/issues or by contacting
-the Licensor directly. Permission is valid only if given in writing by the
-Licensor. Silence is not permission.
+sent to the Licensor, Timothy Curry, by LinkedIn message. Permission is valid
+only if given in writing by the Licensor. Silence is not permission.
 
 7. Third-party components
 
