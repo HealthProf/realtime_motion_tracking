@@ -22,6 +22,8 @@ export interface CoachInput {
   expectedView: 'frontal' | 'sagittal' | null;
   /** Camera roll/pitch away from level in degrees (phones/tablets), or null when no sensor is available. */
   tiltDeg: number | null;
+  /** Frame rate the selected activity needs for usable timing, if any. */
+  minFps?: number;
 }
 
 /**
@@ -73,7 +75,9 @@ export function coachChecks(i: CoachInput): Check[] {
   add('tracking', 'Tracking confidence', vis >= 0.8 ? 'pass' : vis >= 0.6 ? 'warn' : 'fail',
     vis >= 0.8 ? `Mean landmark confidence ${vis.toFixed(2)}.` : `Mean landmark confidence ${vis.toFixed(2)}. Improve lighting, use a plain background, and wear fitted clothing that contrasts with it.`);
 
-  if (Number.isFinite(i.fps)) {
+  if (Number.isFinite(i.fps) && i.minFps && i.fps >= 27 && i.fps < i.minFps) {
+    add('fps', 'Frame rate', 'warn', `${i.fps.toFixed(0)} frames per second. This activity is fast: ${i.minFps} or more is needed for usable timing. Choose 60 fps and add light.`);
+  } else if (Number.isFinite(i.fps)) {
     add('fps', 'Frame rate', i.fps >= 27 ? 'pass' : i.fps >= 20 ? 'warn' : 'fail',
       i.fps >= 27 ? `${i.fps.toFixed(0)} frames per second.` : `${i.fps.toFixed(0)} frames per second. Add light (cameras slow down in dim rooms), close other apps, or choose the Lite model.`);
   }

@@ -39,6 +39,8 @@
                 <option value="squat">Squat (side view)</option>
                 <option value="jump">Vertical jump (side view)</option>
                 <option value="raise">Arm raise (front view)</option>
+                <option value="cycle">Cycling on a trainer (side view)</option>
+                <option value="run">Treadmill running (side view)</option>
               </select>
             </label>
             <button id="btn-start-demo">Run demo</button>
@@ -107,6 +109,7 @@
         <canvas id="res-chart" class="chart tall" role="img" aria-label="Plot of processed trial data"></canvas>
         <div id="res-legend" class="legend"></div>
         <div class="table-wrap"><table id="res-table"><caption>Summary (zero-phase filtered)</caption><thead></thead><tbody></tbody></table></div>
+        <div id="res-mode"></div>
         <div id="res-reps"></div>
         <div id="res-symmetry"></div>
         <div id="res-jump"></div>
@@ -175,6 +178,14 @@
         <div class="fields">
           <label>Activity <select id="preset"></select></label>
           <p id="preset-guidance" class="muted"></p>
+          <div id="mode-bike" class="fields" hidden>
+            <p class="muted">Optional tape measurements for a saddle-height cross-check.</p>
+            <label>Inseam (cm) <input type="number" id="inseam" min="50" max="110" step="0.5" placeholder="e.g. 82"></label>
+            <label>Saddle height, bottom bracket centre to saddle top (cm) <input type="number" id="saddle" min="50" max="110" step="0.5" placeholder="e.g. 73"></label>
+          </div>
+          <div id="mode-run" class="fields" hidden>
+            <label>Treadmill speed (km/h), used for step length <input type="number" id="speed" min="3" max="30" step="0.1" placeholder="e.g. 10"></label>
+          </div>
           <label>Side
             <select id="side"><option value="auto">Auto (nearest the camera)</option><option value="left">Left</option><option value="right">Right</option><option value="both">Both</option></select>
           </label>
@@ -224,7 +235,22 @@
             <select id="ly-highlight"><option value="">No highlight</option></select>
           </label>
           <ul id="muscle-list" class="muscles"></ul>
-          <p class="muted">Bones and muscles are a generic schematic fitted to the tracked joints. They show typical locations, not this person's anatomy, and do not indicate muscle activity.</p>
+          <fieldset id="system-list"><legend>More anatomy</legend></fieldset>
+          <label>Opacity of these layers <input type="range" id="ly-systems-op" min="0.1" max="1" step="0.05" value="0.85"></label>
+          <p class="muted">All anatomy layers are a generic schematic for an average adult, fitted to the tracked joints. They show roughly where structures lie, not this person's anatomy. Organ positions in particular vary with breathing, posture and build. Moving highlights on vessels show the direction of blood flow at a nominal rate: they are not a measurement of this person's pulse or circulation, and muscles are not shown as active or inactive.</p>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Find anatomy</summary>
+        <div class="fields">
+          <label for="find-input">Structure name</label>
+          <div class="find-box">
+            <input type="text" id="find-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="find-list" autocomplete="off" spellcheck="false" placeholder="e.g. femur, ACL, liver, sciatic">
+            <button id="find-clear" hidden>Clear</button>
+          </div>
+          <ul id="find-list" role="listbox" aria-label="Matching structures" hidden></ul>
+          <p id="find-status" role="status" class="muted">Type a name. If the structure is in the picture it is circled; if not, an arrow shows which way to move the camera.</p>
         </div>
       </details>
 

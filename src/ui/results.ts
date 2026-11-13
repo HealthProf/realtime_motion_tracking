@@ -12,6 +12,9 @@ import { filtfiltGaps } from '../kinematics/butterworth';
 import { derivative, median, secondDerivative } from '../kinematics/series';
 import { ANGLE_BY_ID } from '../measure/definitions';
 import { L, POINT_LABELS, type PointId } from '../pose/landmarks';
+import { bikeFrontReport, bikeSideReport, type ModeInputs } from '../modes/bike';
+import { reportCsv, STATUS_TEXT, type ModeReport } from '../modes/report';
+import { runBackReport, runSideReport } from '../modes/run';
 import { PRESET_BY_ID } from '../presets/presets';
 import { drawChart, legendHtml, PALETTE, type Series } from '../render/chart';
 import { $, esc, f, say, settings } from '../state';
@@ -26,6 +29,9 @@ interface Current {
   name: string;
 }
 let cur: Current | null = null;
+let modeReport: ModeReport | null = null;
+/** Last report per mode and view, for the adjust-and-re-measure comparison. */
+const previousReports = new Map<string, { report: ModeReport; trialName: string }>();
 
 const options = (): ProcessOptions => ({
   cutoff: settings.cutoff, angles: settings.angles.slice(), points: settings.points.slice(), convention: settings.convention,
@@ -153,6 +159,7 @@ function renderAll(): void {
   $('res-table').querySelector('thead')!.innerHTML = '<tr><th scope="col">Measurement</th><th scope="col">Min</th><th scope="col">Max</th><th scope="col">Range</th><th scope="col">Peak rate</th><th scope="col">Peak acceleration</th></tr>';
   $('res-table').querySelector('tbody')!.innerHTML = rows.join('') || '<tr><td colspan="6">Select at least one angle or point under "Activity and measurements".</td></tr>';
 
+  renderMode();
   renderReps();
   renderSymmetry();
   renderJump();
@@ -160,6 +167,56 @@ function renderAll(): void {
   populateTeaching();
   renderTeaching();
 }
+
+function renderMode(): void {
+  modeReport = null;
+  if (!cur) return;
+  const { trial } = cur;
+  const preset = PRESET_BY_ID.get(trial.meta.preset);
+  const mode = preset?.analysis.includes('bike') ? 'bike' : preset?.analysis.includes('run') ? 'run' : null;
+  const el = $('res-mode');
+  if (!mode) { el.innerHTML = ''; return; }
+  const view = trialView(trial);
+  if (view !== 'sagittal' && view !== 'frontal') {
+    el.innerHTML = `<p class="warnings">The ${mode === 'bike' ? 'bike fit' : 'running'} report was not produced: the camera view was ${view === 'oblique' ? 'oblique' : 'not recognisable'}. Record square-on from the side, or directly from the ${mode === 'bike' ? 'front' : 'back'}.</p>`;
+    return;
+  }
+  const inp: ModeInputs = {
+    cutoff: settings.cutoff, minVisibility: settings.minVisibility, bodyModel: settings.bodyModel,
+    inseamCm: Number.isFinite(settings.inseamCm) ? settings.inseamCm : undefined, saddleCm: Number.isFinite(settings.saddleCm) ? settings.saddleCm : undefined,
+    speedKmh: Number.isFinite(settings.speedKmh) ? settings.speedKmh : undefined,
+  };
+  let r: ModeReport;
+  try {
+    r = mode === 'bike' ? (view === 'sagittal' ? bikeSideReport(trial, inp) : bikeFrontReport(trial, inp)) : view === 'sagittal' ? runSideReport(trial, inp) : runBackReport(trial, inp);
+  } catch (err) {
+    el.innerHTML = `<p class="warnings">${esc((err as Error).message)}</p>`;
+    return;
+  }
+  modeReport = r;
+  const key = `${r.mode}:${r.view}`;
+  const prev = previousReports.get(key);
+  const before = prev && prev.trialName !== cur.name ? prev.report : null;
+  const cls = (st: string) => (st === 'in' ? 'status-in' : st.startsWith('borderline') ? 'status-borderline' : st === 'low' || st === 'high' ? 'status-out' : '');
+  const refText = (m: ModeReport['rows'][number]) => (m.ref ? `${m.ref.low ?? ''}${m.ref.low !== null && m.ref.high !== null ? ' to ' : m.ref.low !== null ? ' or more' : 'up to '}${m.ref.high ?? ''} ${esc(m.ref.unit)}${m.band ? ` (tool uncertainty about \u00b1${m.band})` : ''}<br><small><a href="https://doi.org/${m.ref.doi}" target="_blank" rel="noopener">${esc(m.ref.citation)}</a>. ${esc(m.ref.basis)}</small>` : '');
+  const rowsHtml = r.rows.map((m) => {
+    const b = before?.rows.find((x) => x.id === m.id);
+    const change = b && Number.isFinite(b.mean) && Number.isFinite(m.mean) ? `${f(b.mean, m.digits)} (${m.mean - b.mean >= 0 ? '+' : ''}${f(m.mean - b.mean, m.digits)})` : '';
+    return `<tr><td class="wrap">${esc(m.label)}${m.note ? `<br><small class="muted">${esc(m.note)}</small>` : ''}</td><td>${m.status === 'withheld' ? '\u2013' : `${f(m.mean, m.digits)} ${esc(m.unit)}`}</td><td>${Number.isFinite(m.sd) ? f(m.sd, m.digits) : ''}</td><td>${m.n || ''}</td>${before ? `<td>${change}</td>` : ''}<td class="wrap">${refText(m)}</td><td class="${cls(m.status)}">${m.status === 'none' ? '' : STATUS_TEXT[m.status]}</td></tr>`;
+  }).join('');
+  el.innerHTML = `<h3>${esc(r.title)}</h3>
+    <p class="muted">${r.cycles} ${r.mode === 'bike' ? 'pedal revolutions' : r.view === 'side' ? 'strides' : 'steps per side'} analysed at ${f(r.fs)} Hz${r.side !== 'both' ? `, ${r.side} side (nearest the camera)` : ''}.${before ? ' Compared with the previous trial in this view.' : ''}</p>
+    <div class="table-wrap"><table><caption class="sr">${esc(r.title)} measurements</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Mean</th><th scope="col">SD</th><th scope="col">n</th>${before ? '<th scope="col">Previous (change)</th>' : ''}<th scope="col" class="wrap">Reference range</th><th scope="col">Status</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+    <h3>Options to try, then re-measure</h3>
+    <ul class="options">${r.options.map((o) => `<li>${esc(o.text)}<small>Why: ${esc(o.because)}${o.citation ? ` <a href="https://doi.org/${o.citation.doi}" target="_blank" rel="noopener">${esc(o.citation.citation)}</a>` : ''}</small></li>`).join('')}</ul>
+    <h3>Read before acting on this</h3>
+    <ul class="caveats">${r.caveats.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    <div class="row"><button id="btn-mode-csv">Download this report (CSV)</button></div>`;
+  $('btn-mode-csv').addEventListener('click', () => cur && modeReport && download(textBlob(reportCsv(modeReport), 'text/csv'), `${cur.name}-${modeReport.mode}-${modeReport.view}-report.csv`));
+  if (r.cycles > 0) previousReports.set(key, { report: r, trialName: cur.name });
+}
+
+const modeLines = (): string[] => (modeReport ? reportCsv(modeReport).trim().split('\n').map((l) => l.replace(/^# /, '')).map((l) => `report: ${l}`) : []);
 
 function renderReps(): void {
   if (!cur) return;
@@ -301,7 +358,7 @@ export function initResults(): void {
   for (const id of ['teach-signal', 'teach-decimate']) $(id).addEventListener('change', renderTeaching);
   $('teach-cutoff').addEventListener('input', renderTeaching);
   $('notes').addEventListener('input', () => { if (cur) cur.trial.meta.notes = $<HTMLTextAreaElement>('notes').value; });
-  $('btn-csv').addEventListener('click', () => cur && download(textBlob(processedCsv(cur.trial, cur.processed, cur.opts, $<HTMLInputElement>('chk-csv-meta').checked), 'text/csv'), `${cur.name}-kinematics.csv`));
+  $('btn-csv').addEventListener('click', () => cur && download(textBlob(processedCsv(cur.trial, cur.processed, cur.opts, $<HTMLInputElement>('chk-csv-meta').checked, modeLines()), 'text/csv'), `${cur.name}-kinematics.csv`));
   $('btn-raw').addEventListener('click', () => cur && download(textBlob(landmarksCsv(cur.trial), 'text/csv'), `${cur.name}-landmarks.csv`));
   $('btn-session').addEventListener('click', () => cur && download(textBlob(sessionJson(cur.trial), 'application/json'), `${cur.name}-session.json`));
   $('btn-video-dl').addEventListener('click', () => cur?.video && download(cur.video, `${cur.name}.${cur.videoExt}`));

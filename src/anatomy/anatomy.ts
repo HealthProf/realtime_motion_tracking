@@ -9,10 +9,10 @@ import type { Lm } from '../types';
 export type AnatomyView = 'anterior' | 'posterior' | 'lateral';
 export type JointGroup = 'ankle' | 'knee' | 'hip' | 'trunk' | 'shoulder' | 'elbow' | 'wrist';
 
-type P = { x: number; y: number };
-type SegName = 'thigh' | 'shank' | 'foot' | 'upperarm' | 'forearm' | 'trunk';
+export type P = { x: number; y: number };
+export type SegName = 'thigh' | 'shank' | 'foot' | 'upperarm' | 'forearm' | 'trunk';
 /** Attachment point: segment, fraction along it (0 = proximal), offset along the segment normal (in body units). */
-type Att = [SegName, number, number];
+export type Att = [SegName, number, number];
 
 export interface MuscleDef {
   id: string;
@@ -91,7 +91,7 @@ export function detectView(lm: Lm[], world: Lm[] | null, mirrored: boolean): Vie
   return { view: facingCamera ? 'anterior' : 'posterior', facing: 1, nearSide };
 }
 
-interface Rig {
+export interface Rig {
   S: number;
   info: ViewInfo;
   pt: (n: LandmarkName) => P;
@@ -99,9 +99,17 @@ interface Rig {
   seg: (name: SegName, side: 'l' | 'r') => { a: P; b: P; u: P; n: P; len: number };
   at: (att: Att, side: 'l' | 'r') => P;
   sides: ('l' | 'r')[];
+  /**
+   * Point inside the trunk. s: 0 at the shoulder line, 1 at the hip line. left: toward the subject's
+   * left (used in front/back views). ant: toward the front of the body (used in side views). Units of S.
+   */
+  trunk: (s: number, left: number, ant: number) => P;
+  /** Point in the head, in head radii from the mid-ear point: up, subject-left, anterior. */
+  head: (up: number, left: number, ant: number) => P;
+  headRadius: number;
 }
 
-function buildRig(lm: Lm[], info: ViewInfo): Rig {
+export function buildRig(lm: Lm[], info: ViewInfo): Rig {
   const pt = (n: LandmarkName): P => lm[L[n]];
   const midp = (a: P, b: P): P => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   const ms = midp(pt('l_shoulder'), pt('r_shoulder')), mh = midp(pt('l_hip'), pt('r_hip'));
@@ -128,7 +136,18 @@ function buildRig(lm: Lm[], info: ViewInfo): Rig {
     const g = seg(name, side);
     return { x: g.a.x + g.u.x * g.len * s + g.n.x * off * S, y: g.a.y + g.u.y * g.len * s + g.n.y * off * S };
   };
-  return { S, info, pt, seg, at, sides: info.view === 'lateral' ? [info.nearSide] : ['l', 'r'] };
+  const lateral = info.view === 'lateral';
+  const axis = { x: (mh.x - ms.x) / S, y: (mh.y - ms.y) / S };
+  const sw = Math.hypot(pt('l_shoulder').x - pt('r_shoulder').x, pt('l_shoulder').y - pt('r_shoulder').y) || 1;
+  const leftDir = { x: (pt('l_shoulder').x - pt('r_shoulder').x) / sw, y: (pt('l_shoulder').y - pt('r_shoulder').y) / sw };
+  const antDir = seg('trunk', info.nearSide).n;
+  const across = (left: number, ant: number, unit: number): P => (lateral ? { x: antDir.x * ant * unit, y: antDir.y * ant * unit } : { x: leftDir.x * left * unit, y: leftDir.y * left * unit });
+  const trunk = (s2: number, left: number, ant: number): P => { const o = across(left, ant, S); return { x: ms.x + axis.x * s2 * S + o.x, y: ms.y + axis.y * s2 * S + o.y }; };
+  const earMid = midp(pt('l_ear'), pt('r_ear'));
+  const earW = Math.hypot(pt('l_ear').x - pt('r_ear').x, pt('l_ear').y - pt('r_ear').y);
+  const headRadius = lateral ? S * 0.19 : Math.max(earW * 0.62, S * 0.14);
+  const head = (up: number, left: number, ant: number): P => { const o = across(left, ant, headRadius); return { x: earMid.x - axis.x * up * headRadius + o.x, y: earMid.y - axis.y * up * headRadius + o.y }; };
+  return { S, info, pt, seg, at, sides: lateral ? [info.nearSide] : ['l', 'r'], trunk, head, headRadius };
 }
 
 const BONE = '#f3ead2', BONE_EDGE = '#8a7a55';

@@ -64,8 +64,42 @@
 <li><strong>Jump height from flight time</strong>: h = g t&sup2; / 8. This needs no calibration but assumes the body is in the same position at take-off and landing; landing with bent knees inflates it. Flight time is resolved to about one frame interval, which the results table converts to a height resolution (about &plusmn;4 cm at 30 frames per second for a 0.5 s flight). The centre-of-mass method is shown beside it for comparison.</li>
 </ul>
 
-<h2>Bone and muscle layers</h2>
-<p>The bone and muscle layers are a simplified schematic drawn from the tracked keypoints. They show the typical location of structures relative to the segments. They are not an image of the subject's anatomy, they cannot show rotation about a segment's long axis (for example forearm pronation), and they do not show which muscles are active. The "muscles crossing" highlight is a fixed anatomical lookup.</p>
+<h2>Anatomy layers</h2>
+<p>Bones, muscles, internal organs, arteries, veins, nerves, joints and ligaments, lymphatics and surface landmarks are simplified schematics drawn from the tracked keypoints. They show the typical location of structures in an average adult. They are not an image of the subject.</p>
+<ul>
+<li><strong>Limb structures</strong> lie between two tracked joints, so their position is reasonably constrained. Rotation about a segment's long axis (for example forearm pronation) cannot be shown.</li>
+<li><strong>Organs and trunk vessels</strong> are placed from only four keypoints (shoulders and hips) at textbook positions. Real positions shift with breathing, posture and body build, and differ between people. Use the layer for "roughly where", nothing more precise.</li>
+<li><strong>Blood flow</strong> is an animation of direction: away from the heart in arteries, toward it in veins. Its rate is a fixed nominal value. It is not this person's pulse, and the camera cannot see circulation.</li>
+<li><strong>Muscles</strong> are not shown as active or inactive. The "muscles crossing" highlight is a fixed anatomical lookup.</li>
+<li><strong>Reproductive organs are omitted</strong> because the tool has no information about the subject's sex. Left and right are the subject's own left and right in every view.</li>
+<li>In a side view, paired structures are drawn once, for the side nearer the camera.</li>
+</ul>
+
+<h2>Finding a structure by name</h2>
+<p>Search matches only the structures in this app's atlas (about 120, including common names such as "kneecap"). If the structure is in the picture it is circled. If the part of the body it belongs to is hidden or tracked with low confidence, the circle is dashed and labelled as uncertain. If it lies outside the picture, an arrow points toward it. That position is extrapolated by the pose model beyond the edge of the image, so the direction is dependable but the distance is not. If the shoulders and hips are not tracked, the app says it cannot locate the structure.</p>
+
+<h2>Bike fit mode</h2>
+<p>For a rider on a stationary trainer. Record 20 to 30 seconds of steady pedalling, square-on from the side (camera level with the bottom bracket), and separately from the front if you want to compare knee tracking. Measurements are averaged over pedal revolutions and shown as mean, standard deviation and count.</p>
+<table>
+<tr><th>Measurement</th><th>How</th><th>Compared with</th></tr>
+<tr><td>Knee flexion at the bottom of the stroke</td><td>The toe keypoint's path is fitted with a circle to find when the foot passes the bottom; knee flexion is read at that instant.</td><td>30 to 40&deg;, measured dynamically in well-trained male road cyclists (Ferrer-Roca et al., 2012). <a href="https://doi.org/10.1519/JSC.0b013e318245c09d">doi:10.1519/JSC.0b013e318245c09d</a></td></tr>
+<tr><td>Saddle height as % of inseam (from your tape measurements)</td><td>Typed in; not measured by the camera.</td><td>106 to 109 %, a conventional guideline. The same study found it often does not produce a 30 to 40&deg; knee angle.</td></tr>
+<tr><td>Cadence, knee flexion at the top, most closed hip, ankle range, trunk, arm and elbow angles, vertical hip movement, knee position over the foot, knee side-to-side travel (front view)</td><td>From the corresponding keypoints.</td><td>No target. I did not find a single sourced range I could verify for these, and suitable values depend on discipline, flexibility and comfort.</td></tr>
+</table>
+<p>A value is called out of range only when it is beyond the limit by more than 5&deg;, the assumed uncertainty of this tool (published 2D errors for this kind of pose model are about 5&deg; or more). Values just outside are "borderline", and the app suggests confirming with a goniometer. Averaging many revolutions reduces random error but not a consistent offset, such as a hip keypoint that sits in the wrong place for the whole trial. Suggestions are phrased as options to try and re-measure, and each trial is compared with the previous one in the same view.</p>
+<p>A bike frame, handlebars and the far leg hide parts of the body, and the pose model was not trained specifically on cyclists. When a keypoint needed for a measurement is tracked for less than 80 % of the trial, that measurement is withheld.</p>
+
+<h2>Running gait mode</h2>
+<p>For a runner on a treadmill, after several minutes of settling in. The set of measurements follows the 2D video framework of Souza (2016, <a href="https://doi.org/10.1016/j.pmr.2015.08.006">doi:10.1016/j.pmr.2015.08.006</a>). That paper is explicit on two points that govern how this mode words its output: <strong>no cutoffs for abnormal running kinematics exist</strong>, and <strong>recommending form changes to uninjured runners is not evidence-based</strong>.</p>
+<ul>
+<li><strong>Contact and toe-off</strong> are taken as the furthest-forward position of the heel and furthest-back position of the toe relative to the pelvis, adapted from a method validated for walking (Zeni et al., 2008, <a href="https://doi.org/10.1016/j.gaitpost.2007.07.007">doi:10.1016/j.gaitpost.2007.07.007</a>). It has not been validated for running, and in this tool it has been tested only on synthetic data. Unfiltered positions are used for the events because filtering lengthened the apparent contact time by about 30 ms in testing.</li>
+<li><strong>Timing</strong> (contact time, flight time, duty factor) is resolved to about one frame. At 30 frames per second that is 33 ms, over a tenth of a typical ground contact. Use 60 frames per second or more. Step rate assumes left and right steps are alike.</li>
+<li><strong>Foot-strike angle</strong> is the foot's angle to the ground at contact minus its angle when flat. It is classed as rearfoot above 8&deg;, forefoot below &minus;1.6&deg;, midfoot between (Altman &amp; Davis, 2012, <a href="https://doi.org/10.1016/j.gaitpost.2011.09.104">doi:10.1016/j.gaitpost.2011.09.104</a>). Those thresholds came from 9 midfoot strikes in 20 runners using marker-based capture at 1000 Hz. Here the flat reference is taken at mid-stance instead of standing, and the heel and toe keypoints are among the least certain, so treat the class as approximate. Strike pattern is reported for description only: the framework paper finds limited evidence that any pattern is more injurious.</li>
+<li><strong>Peak knee flexion in stance</strong> is compared with "about 45&deg; typical, under 40&deg; associated with some patellofemoral pain subgroups" from the same framework.</li>
+<li><strong>Step-rate option.</strong> When the shank is angled forward at contact with a heel-first landing, the app offers a 5 to 10 % higher step rate as something to try, based on Heiderscheit et al. (2011, <a href="https://doi.org/10.1249/MSS.0b013e3181ebedf4">doi:10.1249/MSS.0b013e3181ebedf4</a>), who changed step rate relative to each runner's own preferred rate. There is no universal target such as 180 steps per minute.</li>
+<li><strong>Back view</strong> reports pelvic drop on each side, step width, knee separation and trunk side lean. The framework paper notes that 2D pelvic drop is repeatable but agrees poorly with 3D measurement, so use it for left/right and before/after comparison only. Keypoints are joint centres, so the "knee window" of the framework cannot be judged directly.</li>
+</ul>
+<p>Neither mode can assess pain, diagnose injury, or tell you the right position or technique for an individual. Neither has been compared with a professional fitting or gait-analysis system.</p>
 
 <h2>What published comparisons report</h2>
 <p>Based on articles retrieved from PubMed, studies comparing this family of models with marker-based motion capture report results that depend strongly on the joint, the task and the camera view:</p>
@@ -81,12 +115,17 @@
 
 <h2>References</h2>
 <ul>
+<li>Altman, A. R., &amp; Davis, I. S. (2012). A kinematic method for footstrike pattern detection in barefoot and shod runners. Gait &amp; Posture, 35(2), 298-300.</li>
 <li>Bazarevsky, V., et al. (2020). BlazePose: On-device real-time body pose tracking. arXiv:2006.10204.</li>
 <li>Casiez, G., Roussel, N., &amp; Vogel, D. (2012). 1&euro; filter: A simple speed-based low-pass filter for noisy input in interactive systems. Proc. CHI 2012.</li>
 <li>de Leva, P. (1996). Adjustments to Zatsiorsky-Seluyanov's segment inertia parameters. Journal of Biomechanics, 29(9), 1223-1230.</li>
 <li>Drillis, R., &amp; Contini, R. (1966). Body segment parameters. Report 1166-03, New York University.</li>
+<li>Ferrer-Roca, V., et al. (2012). Influence of saddle height on lower limb kinematics in well-trained cyclists. Journal of Strength and Conditioning Research, 26(11), 3025-3029.</li>
+<li>Heiderscheit, B. C., et al. (2011). Effects of step rate manipulation on joint mechanics during running. Medicine &amp; Science in Sports &amp; Exercise, 43(2), 296-302.</li>
 <li>Robinson, R. O., Herzog, W., &amp; Nigg, B. M. (1987). Use of force platform variables to quantify the effects of chiropractic manipulation on gait symmetry. Journal of Manipulative and Physiological Therapeutics, 10(4), 172-176.</li>
+<li>Souza, R. B. (2016). An evidence-based videotaped running biomechanics analysis. Physical Medicine and Rehabilitation Clinics of North America, 27(1), 217-236.</li>
 <li>Winter, D. A. (2009). Biomechanics and Motor Control of Human Movement (4th ed.). Wiley.</li>
+<li>Zeni, J. A., Richards, J. G., &amp; Higginson, J. S. (2008). Two simple methods for determining gait events during treadmill and overground walking using kinematic data. Gait &amp; Posture, 27(4), 710-714.</li>
 </ul>
 </main>
 </body>

@@ -29,11 +29,17 @@ export const settings = {
   points: [] as PointId[],
   cutoff: 6,
   maxGap: 0.25,
+  /** Optional typed measurements for the bike and running modes. */
+  inseamCm: NaN,
+  saddleCm: NaN,
+  speedKmh: NaN,
 };
 
 export const layers: Layers = {
   videoOpacity: 1, skeleton: true, labels: true, trails: true, com: true, axes: false,
   bones: false, bonesOpacity: 0.85, muscles: false, musclesOpacity: 0.6, highlight: null,
+  systems: { organs: false, arteries: false, veins: false, nerves: false, ligaments: false, lymph: false, landmarks: false },
+  systemsOpacity: 0.85, find: null,
 };
 
 export const cal: { current: Calibration } = { current: defaultCalibration(720) };

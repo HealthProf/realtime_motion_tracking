@@ -13,7 +13,9 @@ export interface Preset {
   points: string[];
   /** Joint used for repetition detection (unsided), if any. */
   repJoint: string | null;
-  analysis: ('reps' | 'jump' | 'symmetry')[];
+  analysis: ('reps' | 'jump' | 'symmetry' | 'bike' | 'run')[];
+  /** Frame rate below which the setup coach warns for this activity. */
+  minFps?: number;
   /** Suggested low-pass cutoff (Hz) for typical performances of this activity. */
   cutoff: number;
   guidance: string;
@@ -43,6 +45,14 @@ export const PRESETS: Preset[] = [
   {
     id: 'reach', label: 'Overhead reach (bilateral)', view: 'frontal', joints: ['shoulder', 'elbow'], points: ['wrist'], repJoint: 'shoulder', analysis: ['reps', 'symmetry'], cutoff: 6,
     guidance: 'Front view, facing the camera squarely. Raise both arms out to the side and overhead. Symmetry is reported because both limbs are fully visible in this view.',
+  },
+  {
+    id: 'bike', label: 'Bike fit (indoor trainer)', view: null, joints: ['knee', 'hip', 'ankle', 'shoulder', 'elbow', 'trunk_lean'], points: ['hip'], repJoint: null, analysis: ['bike'], cutoff: 6,
+    guidance: 'Bike on a stationary trainer. Side view: camera level with the bottom bracket, square to the bike, whole rider and both wheels in frame; record 20 to 30 seconds of steady pedalling in the usual riding position. Front view (a separate trial): camera in line with the bike to compare knee tracking. Fitted clothing that contrasts with the background improves tracking.',
+  },
+  {
+    id: 'run', label: 'Running gait (treadmill)', view: null, joints: ['knee', 'hip', 'ankle', 'trunk_lean'], points: ['com', 'heel', 'toe'], repJoint: null, analysis: ['run'], cutoff: 8, minFps: 50,
+    guidance: 'Treadmill only. Let the runner settle at their usual pace for several minutes first. Side view: camera at hip height, square to the treadmill, whole body in frame; record 20 to 30 seconds. Back view (a separate trial): camera directly behind. Use 60 fps and bright light: at 30 fps one frame is over a tenth of a ground contact.',
   },
 ];
 

@@ -1,4 +1,8 @@
 import { JOINT_GROUPS, MUSCLES, type JointGroup } from './anatomy/anatomy';
+import { CATALOG_BY_ID, LAYER_LABELS, type CatalogEntry } from './anatomy/catalog';
+import { searchCatalog } from './anatomy/search';
+import { SYSTEMS, type SystemId } from './anatomy/systems';
+import { findExtrema } from './modes/cycles';
 import { closeCamera, listCameras, openCamera, startFrameLoop, type OpenCamera } from './camera/camera';
 import { parseSession } from './capture/csv';
 import { canvasPng, download, stamp, VideoRecorder } from './capture/media';
@@ -44,6 +48,9 @@ let tiltDeg: number | null = null;
 let pickMode: 'cal' | 'origin' | null = null;
 let picks: { x: number; y: number }[] = [];
 let musclesDrawn: string[] = [];
+let findMessage = '';
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const animTime = () => (reducedMotion.matches ? null : performance.now() / 1000);
 const history = { t: [] as number[], series: new Map<string, number[]>() };
 const shots: { name: string; blob: Blob; url: string }[] = [];
 
@@ -69,6 +76,8 @@ function applyPreset(announce = false): void {
   customSelection = false;
   $('preset-guidance').textContent = p.guidance;
   if (changed) selectionChanged();
+  $('mode-bike').hidden = !p.analysis.includes('bike');
+  $('mode-run').hidden = !p.analysis.includes('run');
   if (announce) {
     settings.cutoff = p.cutoff;
     $<HTMLInputElement>('cutoff').value = String(p.cutoff);
@@ -128,10 +137,12 @@ function render(sample: LiveSample | null, bg: CanvasImageSource | null, mirrorB
   const hud = [...hudExtra];
   if (recorder.recording) hud.push(`Trial ${recorder.elapsed.toFixed(1)} s`);
   if (source?.kind === 'synthetic') hud.push('DEMO: synthetic data');
-  musclesDrawn = drawScene(ctx, {
+  const res = drawScene(ctx, {
     w, h, bg, mirrorBg, sample, layers, angles: settings.angles, minVisibility: settings.minVisibility, calibration: cal.current,
-    mirrored: settings.mirror && source?.kind === 'camera', trails: trailsFrom(trailSamples), picks, hud, recording: recorder.recording,
+    mirrored: settings.mirror && source?.kind === 'camera', trails: trailsFrom(trailSamples), picks, hud, recording: recorder.recording, time: animTime(),
   });
+  musclesDrawn = res.musclesDrawn;
+  findMessage = res.search?.message ?? '';
 }
 
 const unit = () => cal.current.unit;
@@ -151,7 +162,22 @@ function updateReadouts(s: LiveSample | null): void {
     if (!p) rows.push(`<tr><td>${esc(POINT_LABELS[id])}</td><td class="low" colspan="2">not visible</td><td class="col3d"></td></tr>`);
     else rows.push(`<tr><td>${esc(POINT_LABELS[id])}</td><td>(${f(p.x, d)}, ${f(p.y, d)}) ${u}</td><td>${f(p.speed, d)} ${u}/s</td><td class="col3d"></td></tr>`);
   }
+  const mode = PRESET_BY_ID.get(settings.preset)?.analysis.find((a) => a === 'bike' || a === 'run');
+  if (mode && !rp) {
+    const c = liveCadence();
+    rows.unshift(`<tr><td><strong>${mode === 'bike' ? 'Cadence' : 'Step rate'}</strong></td><td>${Number.isFinite(c) ? `${(mode === 'bike' ? c : 2 * c).toFixed(0)} ${mode === 'bike' ? 'rev/min' : 'steps/min'}` : '\u2013'}</td><td class="low">last ${HISTORY_SECONDS} s</td><td class="col3d"></td></tr>`);
+  }
   $('readouts').querySelector('tbody')!.innerHTML = rows.join('') || '<tr><td colspan="4" class="low">No measurements selected.</td></tr>';
+}
+
+/** Cycles per minute of the first selected knee angle over the live history window. */
+function liveCadence(): number {
+  const id = settings.angles.find((a) => a.endsWith('_knee'));
+  const v = id ? history.series.get(`angle:${id}`) : undefined;
+  if (!v || v.length < 20) return NaN;
+  const peaks = findExtrema(v, 15).maxima;
+  if (peaks.length < 3) return NaN;
+  return ((peaks.length - 1) * 60) / (history.t[peaks[peaks.length - 1]] - history.t[peaks[0]]);
 }
 
 function pushHistory(s: LiveSample): void {
@@ -192,7 +218,7 @@ function updateLiveChart(): void {
 function updateCoach(s: LiveSample | null): void {
   const checks = coachChecks({
     lm: s?.lm ?? null, world: s?.world ?? null, w: s?.w ?? canvas.width, h: s?.h ?? canvas.height, fps: fpsMeter.fps,
-    expectedView: PRESET_BY_ID.get(settings.preset)?.view ?? null, tiltDeg,
+    expectedView: PRESET_BY_ID.get(settings.preset)?.view ?? null, tiltDeg, minFps: PRESET_BY_ID.get(settings.preset)?.minFps,
   });
   const html = checks.map((c) => `<li class="${c.status}"><strong>${esc(c.label)}</strong><span class="sr"> (${c.status === 'na' ? 'not checked' : c.status})</span><span class="detail">${esc(c.detail)}</span></li>`).join('');
   if ($('coach').innerHTML !== html) $('coach').innerHTML = html;
@@ -245,7 +271,7 @@ function onPose(frame: PoseFrame, bg: CanvasImageSource | null, mirrorBg: boolea
   }
   if (now - throttle.readouts > 120) { throttle.readouts = now; updateReadouts(sample); }
   if (now - throttle.chart > 100) { throttle.chart = now; updateLiveChart(); }
-  if (now - throttle.coach > 400) { throttle.coach = now; updateCoach(sample); updateMuscleList(); }
+  if (now - throttle.coach > 400) { throttle.coach = now; updateCoach(sample); updateMuscleList(); updateFindStatus(); }
   if (now - throttle.chips > 500) { throttle.chips = now; updateChips(); }
   if (now - throttle.sides > 1500 && !customSelection && !recorder.recording && settings.side === 'auto') { throttle.sides = now; applyPreset(); }
 }
@@ -562,6 +588,78 @@ function initLayers(): void {
   bind('ly-skeleton', 'skeleton'); bind('ly-labels', 'labels'); bind('ly-trails', 'trails'); bind('ly-com', 'com'); bind('ly-axes', 'axes');
   bind('ly-bones', 'bones'); bind('ly-bones-op', 'bonesOpacity', true); bind('ly-muscles', 'muscles'); bind('ly-muscles-op', 'musclesOpacity', true);
   $('ly-highlight').addEventListener('change', () => { layers.highlight = ($<HTMLSelectElement>('ly-highlight').value || null) as JointGroup | null; });
+  bind('ly-systems-op', 'systemsOpacity', true);
+  $('system-list').insertAdjacentHTML('beforeend', SYSTEMS.map((sys) => `<label class="inline"><input type="checkbox" id="ly-sys-${sys.id}" value="${sys.id}"> <span class="swatch" style="--c:${sys.color}"></span> ${esc(sys.label)}</label>`).join(''));
+  $('system-list').addEventListener('change', (ev) => {
+    const el = ev.target as HTMLInputElement;
+    layers.systems[el.value as SystemId] = el.checked;
+  });
+}
+
+// ---- Anatomy search ----------------------------------------------------------------------------
+
+function updateFindStatus(): void {
+  if (!layers.find) return;
+  const msg = findMessage || `${CATALOG_BY_ID.get(layers.find)?.name ?? ''}: start the camera or the demo to locate it.`;
+  if ($('find-status').textContent !== msg) $('find-status').textContent = msg;
+}
+
+function setLayer(id: CatalogEntry['layer'], on: boolean): void {
+  if (id === 'bones' || id === 'muscles') {
+    layers[id] = on;
+    $<HTMLInputElement>(`ly-${id}`).checked = on;
+  } else {
+    layers.systems[id] = on;
+    $<HTMLInputElement>(`ly-sys-${id}`).checked = on;
+  }
+}
+
+function initFind(): void {
+  const input = $<HTMLInputElement>('find-input'), list = $('find-list'), clear = $<HTMLButtonElement>('find-clear');
+  let results: CatalogEntry[] = [], active = -1;
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+  const paint = () => {
+    list.innerHTML = results.map((e, i) => `<li role="option" id="find-opt-${i}" aria-selected="${i === active}" data-i="${i}"><span>${esc(e.name)}</span><small>${esc(LAYER_LABELS[e.layer])}</small></li>`).join('');
+    if (active >= 0) { input.setAttribute('aria-activedescendant', `find-opt-${active}`); list.children[active]?.scrollIntoView({ block: 'nearest' }); }
+  };
+  const choose = (e: CatalogEntry) => {
+    layers.find = e.id;
+    setLayer(e.layer, true);
+    input.value = e.name;
+    clear.hidden = false;
+    close();
+    findMessage = '';
+    $('find-status').textContent = `Looking for ${e.name}. The ${LAYER_LABELS[e.layer]} layer was switched on.`;
+  };
+  input.addEventListener('input', () => {
+    results = searchCatalog(input.value);
+    active = results.length ? 0 : -1;
+    list.hidden = !input.value.trim();
+    input.setAttribute('aria-expanded', String(!list.hidden));
+    if (!results.length && input.value.trim()) { list.innerHTML = '<li role="option" aria-disabled="true">No matching structure in this app\'s atlas.</li>'; return; }
+    paint();
+  });
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      if (!results.length) return;
+      ev.preventDefault();
+      active = (active + (ev.key === 'ArrowDown' ? 1 : results.length - 1)) % results.length;
+      paint();
+    } else if (ev.key === 'Enter' && results[active]) { ev.preventDefault(); choose(results[active]); }
+    else if (ev.key === 'Escape') close();
+  });
+  list.addEventListener('mousedown', (ev) => {
+    const li = (ev.target as HTMLElement).closest<HTMLElement>('li[data-i]');
+    if (li) { ev.preventDefault(); choose(results[Number(li.dataset.i)]); }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 100));
+  clear.addEventListener('click', () => {
+    layers.find = null;
+    input.value = '';
+    clear.hidden = true;
+    $('find-status').textContent = 'Search cleared.';
+    input.focus();
+  });
 }
 
 function initTilt(): void {
@@ -583,6 +681,10 @@ function init(): void {
   initLayers();
   initResults();
   initTilt();
+  initFind();
+  for (const [id, key] of [['inseam', 'inseamCm'], ['saddle', 'saddleCm'], ['speed', 'speedKmh']] as const) {
+    $(id).addEventListener('change', () => { const v = Number($<HTMLInputElement>(id).value); settings[key] = v > 0 ? v : NaN; if (hasTrial()) reprocess(); });
+  }
   $<HTMLSelectElement>('tier').value = settings.tier;
   $<HTMLInputElement>('mirror').checked = settings.mirror;
   $('version').textContent = `Version ${__APP_VERSION__}. Runs entirely in your browser.`;
@@ -653,10 +755,10 @@ function init(): void {
   $('live-chart-mode').addEventListener('change', updateLiveChart);
   document.addEventListener('visibilitychange', () => { if (document.hidden && recorder.recording) { say('Trial stopped because the page was hidden.'); void stopTrial(); } });
 
-  drawScene(ctx, { w: canvas.width, h: canvas.height, bg: null, mirrorBg: false, sample: null, layers, angles: [], minVisibility: 0.5, calibration: cal.current, mirrored: false, trails: new Map(), picks: [], hud: [], recording: false });
+  drawScene(ctx, { w: canvas.width, h: canvas.height, bg: null, mirrorBg: false, sample: null, layers, angles: [], minVisibility: 0.5, calibration: cal.current, mirrored: false, trails: new Map(), picks: [], hud: [], recording: false, time: null });
   const q = new URLSearchParams(location.search);
   const demo = q.get('demo');
-  if (demo === 'squat' || demo === 'jump' || demo === 'raise') void startDemo(demo);
+  if (demo === 'squat' || demo === 'jump' || demo === 'raise' || demo === 'cycle' || demo === 'run') void startDemo(demo);
   else if (q.get('autostart') === 'camera') void startCamera();
 }
 

@@ -106,6 +106,42 @@ const fake = process.env.FAKE_VIDEO;
     await page.click('#btn-trial');
     await page.waitForSelector('#res-symmetry table');
 
+    // New anatomy layers and search (front view, still on the arm-raise demo).
+    for (const sys of ['organs', 'arteries', 'veins', 'nerves', 'ligaments', 'lymph', 'landmarks']) await page.check(`#ly-sys-${sys}`);
+    await page.fill('#find-input', 'thigh bone');
+    assert.match(await page.textContent('#find-list'), /Femur/);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Femur is highlighted/.test(document.getElementById('find-status').textContent));
+    await page.fill('#find-input', 'scapula');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /back view/.test(document.getElementById('find-status').textContent));
+    await page.fill('#find-input', 'qqqq');
+    assert.match(await page.textContent('#find-list'), /No matching structure/);
+    const frameMs = await page.evaluate(() => new Promise((resolve) => { let n = 0; const t0 = performance.now(); const tick = () => (++n === 60 ? resolve((performance.now() - t0) / 60) : requestAnimationFrame(tick)); requestAnimationFrame(tick); }));
+    console.log(`frame interval with every layer on: ${frameMs.toFixed(1)} ms`);
+
+    // Bike fit and running modes on the synthetic rider and runner.
+    for (const [demo, preset, text] of [['cycle', 'bike', /Knee flexion at the bottom of the stroke/], ['run', 'run', /Foot-strike angle/]]) {
+      await page.goto(`${URL}?demo=${demo}`);
+      await openAll();
+      await page.selectOption('#preset', preset);
+      await page.waitForTimeout(2500);
+      assert.match(await page.textContent('#readouts tbody tr'), demo === 'cycle' ? /9\d rev\/min/ : /17\d steps\/min/);
+      await page.click('#btn-trial');
+      await page.waitForTimeout(8000);
+      await page.click('#btn-trial');
+      await page.waitForSelector('#res-mode table');
+      const report = await page.textContent('#res-mode');
+      assert.match(report, text);
+      assert.match(report, /Options to try/);
+      const rep = await save('#btn-mode-csv');
+      const body = fs.readFileSync(rep.path, 'utf8');
+      assert.match(body, /doi|10\.\d{4}/);
+      assert.match(rep.name, new RegExp(`${preset}-side-report\\.csv$`));
+      const kin = fs.readFileSync((await save('#btn-csv')).path, 'utf8');
+      assert.match(kin, /# report: /);
+    }
+
     if (fake) {
       await page.goto(`${URL}?autostart=camera`);
       await page.waitForFunction(() => !document.getElementById('btn-trial').disabled, null, { timeout: 90000 });

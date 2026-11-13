@@ -28,11 +28,11 @@ export function metadataLines(trial: Trial, p: Processed, o: ProcessOptions): st
   return lines;
 }
 
-export function processedCsv(trial: Trial, p: Processed, o: ProcessOptions, withMetadata = true): string {
+export function processedCsv(trial: Trial, p: Processed, o: ProcessOptions, withMetadata = true, extraLines: string[] = []): string {
   const marks = new Map<number, string>();
   for (const m of p.markRows) marks.set(m.row, marks.has(m.row) ? `${marks.get(m.row)}; ${m.label}` : m.label);
   const rows: string[] = [];
-  if (withMetadata) for (const l of metadataLines(trial, p, o)) rows.push(`# ${l}`);
+  if (withMetadata) for (const l of [...metadataLines(trial, p, o), ...extraLines]) rows.push(`# ${l}`);
   rows.push(['time_s', 'mark', ...p.columns.map((c) => c.name)].join(','));
   for (let i = 0; i < p.t.length; i++) {
     rows.push([num(p.t[i], 4), esc(marks.get(i) ?? ''), ...p.columns.map((c) => num(c.data[i]))].join(','));

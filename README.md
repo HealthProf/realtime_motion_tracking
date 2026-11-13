@@ -17,7 +17,13 @@ device: no video or data is uploaded.
 - Activity presets (squat, sit-to-stand, vertical jump, gait, overhead reach), repetition detection,
   left/right symmetry (front views), and jump height from flight time.
 - A setup coach that checks framing, distance, movement plane, tracking confidence, frame rate and camera level.
-- Toggleable schematic bone and muscle layers, with "muscles crossing this joint" highlighting.
+- Toggleable schematic anatomy layers: bones, muscles (with "muscles crossing this joint" highlighting),
+  internal organs, arteries and veins with a direction-of-flow animation, nerves, joints and ligaments,
+  lymphatics, and surface landmarks.
+- Anatomy search: type a name and the structure is circled if it is in the picture, or an arrow shows
+  which way to move the camera if it is not.
+- Bike fit mode (indoor trainer) and running gait mode (treadmill): per-cycle measurements compared with
+  sourced reference ranges, stated uncertainty, and options to try and re-measure.
 - A "Why filtering matters" panel that shows how differentiation amplifies noise.
 - Works offline after the first visit. A demo mode with synthetic data needs no camera.
 
@@ -48,7 +54,7 @@ npm run dev
 | `npm run build` | Type-check and build to `dist/` |
 | `npm run e2e` | Browser smoke test against the build (needs Playwright with Chromium installed) |
 
-Append `?demo=squat`, `?demo=jump` or `?demo=raise` to the URL to start the synthetic demo directly.
+Append `?demo=squat`, `?demo=jump`, `?demo=raise`, `?demo=cycle` or `?demo=run` to the URL to start the synthetic demo directly.
 
 ## Deploying to GitHub Pages
 
@@ -64,7 +70,8 @@ src/analysis/     centre of mass, repetitions, symmetry, jump, residual analysis
 src/capture/      trials, processing, CSV/session export, video, replay buffer
 src/pose/         pose model wrapper, keypoint topology, synthetic demo poses
 src/coach/        setup checks
-src/anatomy/      schematic bone and muscle layers
+src/anatomy/      schematic anatomy layers, structure catalog, search
+src/modes/        bike fit and running gait analysis, reference ranges, reports
 src/render/       canvas overlay and charts
 src/presets/      activity presets (data only)
 src/ui/, main.ts  interface wiring
