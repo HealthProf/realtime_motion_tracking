@@ -3,7 +3,7 @@
 import type { Lm, PoseFrame } from '../types';
 import { L, LANDMARK_NAMES, type LandmarkName } from './landmarks';
 
-export type SyntheticActivity = 'squat' | 'jump' | 'raise';
+export type SyntheticActivity = 'squat' | 'jump' | 'raise' | 'cycle' | 'run';
 
 export const SYNTH = {
   width: 1280,
@@ -18,6 +18,13 @@ export const SYNTH = {
   raisePeriod: 4,
   raiseMaxLeft: 150,
   raiseMaxRight: 170,
+  /** Pedalling cadence (rev/min) and the hip position that sets saddle height. */
+  cycleCadence: 90,
+  cycleHip: { x: -0.2, y: 1.0 },
+  /** Running: stride time (s), ground contact time (s), foot-strike angle (deg, + = heel first). */
+  runStride: 0.7,
+  runContact: 0.25,
+  runStrikeAngle: 12,
 } as const;
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -87,12 +94,117 @@ function frontal(abdL: number, abdR: number): Partial<Record<LandmarkName, P>> {
   return out;
 }
 
+/** Two-link inverse kinematics: joint position between `a` and `b`, bending toward +x (knee) or -x. */
+function ik(a: P, b: P, l1: number, l2: number, bend: 1 | -1): P {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const d = Math.min(Math.hypot(dx, dy), l1 + l2 - 1e-6);
+  const along = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+  const h = Math.sqrt(Math.max(0, l1 * l1 - along * along));
+  const ux = dx / Math.hypot(dx, dy), uy = dy / Math.hypot(dx, dy);
+  // Perpendicular chosen so the joint lies on the +x side for bend = 1.
+  let px = -uy, py = ux;
+  if (px * bend < 0) { px = -px; py = -py; }
+  return { x: a.x + ux * along + px * h, y: a.y + uy * along + py * h };
+}
+const rot = (v: P, deg: number): P => ({ x: v.x * Math.cos(rad(deg)) - v.y * Math.sin(rad(deg)), y: v.x * Math.sin(rad(deg)) + v.y * Math.cos(rad(deg)) });
+const plus = (a: P, b: P): P => ({ x: a.x + b.x, y: a.y + b.y });
+
+type Leg = { hip: P; knee: P; ankle: P; heel: P; toe: P };
+type Arm = { shoulder: P; elbow: P; wrist: P };
+
+function assemble(legs: { l: Leg; r: Leg }, arms: { l: Arm; r: Arm }, head: P): Partial<Record<LandmarkName, P>> {
+  const out: Partial<Record<LandmarkName, P>> = {};
+  for (const side of ['l', 'r'] as const) {
+    const g = legs[side], a = arms[side];
+    out[`${side}_hip`] = g.hip; out[`${side}_knee`] = g.knee; out[`${side}_ankle`] = g.ankle; out[`${side}_heel`] = g.heel; out[`${side}_toe`] = g.toe;
+    out[`${side}_shoulder`] = a.shoulder; out[`${side}_elbow`] = a.elbow; out[`${side}_wrist`] = a.wrist;
+    const hand = plus(a.wrist, { x: 0.07 * Math.sign(a.wrist.x - a.elbow.x || 1), y: -0.02 });
+    out[`${side}_index`] = hand; out[`${side}_pinky`] = hand; out[`${side}_thumb`] = hand;
+    out[`${side}_ear`] = { x: head.x - 0.02, y: head.y };
+    out[`${side}_eye`] = { x: head.x + 0.07, y: head.y + 0.03 };
+    out[`${side}_eye_inner`] = { x: head.x + 0.08, y: head.y + 0.03 };
+    out[`${side}_eye_outer`] = { x: head.x + 0.06, y: head.y + 0.03 };
+  }
+  out.nose = { x: head.x + 0.1, y: head.y };
+  out.mouth_l = { x: head.x + 0.08, y: head.y - 0.05 };
+  out.mouth_r = { x: head.x + 0.08, y: head.y - 0.05 };
+  return out;
+}
+
+const BB: P = { x: 0, y: 0.28 }, CRANK = 0.17;
+
+/** One leg of the synthetic cyclist at crank angle `deg` (0 = top, 90 = forward). */
+export function cycleLeg(deg: number): Leg {
+  const pedal: P = { x: BB.x + CRANK * Math.sin(rad(deg)), y: BB.y + CRANK * Math.cos(rad(deg)) };
+  const pitch = -8 + 8 * Math.sin(rad(deg)); // mild ankling
+  const ankle = plus(pedal, rot({ x: -0.12, y: 0.09 }, pitch));
+  const hip: P = { ...SYNTH.cycleHip };
+  return { hip, knee: ik(hip, ankle, SEG.thigh, SEG.shank, 1), ankle, heel: plus(pedal, rot({ x: -0.19, y: 0.02 }, pitch)), toe: plus(pedal, rot({ x: 0.05, y: -0.01 }, pitch)) };
+}
+const flexion = (g: Leg) => {
+  const a = Math.atan2(g.hip.y - g.knee.y, g.hip.x - g.knee.x), b = Math.atan2(g.ankle.y - g.knee.y, g.ankle.x - g.knee.x);
+  let d = Math.abs(a - b) * (180 / Math.PI);
+  if (d > 180) d = 360 - d;
+  return 180 - d;
+};
+/** Ground-truth knee flexion (deg) of the near (left) leg of the synthetic cyclist at crank angle `deg`. */
+export const cycleKneeFlexion = (deg: number) => flexion(cycleLeg(deg));
+
+function cyclist(t: number): Partial<Record<LandmarkName, P>> {
+  const deg = (t * SYNTH.cycleCadence * 6) % 360;
+  const hip: P = { ...SYNTH.cycleHip };
+  const shoulder = add(hip, SEG.trunk, 45);
+  const elbow = add(shoulder, SEG.upperArm, 145);
+  const arm: Arm = { shoulder, elbow, wrist: add(elbow, SEG.forearm, 125) };
+  return assemble({ l: cycleLeg(deg), r: cycleLeg(deg + 180) }, { l: arm, r: arm }, add(shoulder, 0.2, 30));
+}
+
+/** One leg of the synthetic runner. `tau` is time within the stride (0 = initial contact). */
+export function runLeg(tau: number, hip: P): Leg {
+  const T = SYNTH.runStride, tc = SYNTH.runContact;
+  const tt = ((tau % T) + T) % T;
+  const foot = (heel: P, pitch: number): Leg => {
+    const ankle = plus(heel, rot({ x: 0.06, y: 0.07 }, pitch));
+    return { hip, knee: ik(hip, ankle, SEG.thigh, SEG.shank, 1), ankle, heel, toe: plus(heel, rot({ x: 0.25, y: 0 }, pitch)) };
+  };
+  const stance = (u: number): { heel: P; pitch: number } => {
+    const flatHeelX = 0.12 - 0.4 * u; // the belt carries the foot backward
+    if (u < 0.2) return { heel: { x: flatHeelX, y: 0 }, pitch: SYNTH.runStrikeAngle * (1 - u / 0.2) };
+    if (u < 0.6) return { heel: { x: flatHeelX, y: 0 }, pitch: 0 };
+    const pitch = (-45 * (u - 0.6)) / 0.4; // heel rise, pivoting on the toe
+    const toe: P = { x: flatHeelX + 0.25, y: 0 };
+    return { heel: plus(toe, rot({ x: -0.25, y: 0 }, pitch)), pitch };
+  };
+  if (tt < tc) { const s = stance(tt / tc); return foot(s.heel, s.pitch); }
+  const w = (tt - tc) / (T - tc), sm = w * w * (3 - 2 * w);
+  const a = stance(1), b = stance(0);
+  return foot({ x: a.heel.x + (b.heel.x - a.heel.x) * sm, y: a.heel.y * (1 - sm) + 0.22 * Math.sin(Math.PI * w) }, a.pitch + (b.pitch - a.pitch) * sm);
+}
+/** Hip position of the synthetic runner at time t (lowest at mid-stance of each step). */
+export function runHip(t: number): P {
+  const half = SYNTH.runStride / 2;
+  return { x: 0, y: 0.89 - 0.03 * Math.cos((2 * Math.PI * (t - SYNTH.runContact / 2)) / half) };
+}
+
+function runner(t: number): Partial<Record<LandmarkName, P>> {
+  const hip = runHip(t);
+  const shoulder = add(hip, SEG.trunk, 8);
+  const swing = 25 * Math.sin((2 * Math.PI * t) / SYNTH.runStride);
+  const arm = (sgn: number): Arm => {
+    const elbow = add(shoulder, SEG.upperArm, 180 - sgn * swing);
+    return { shoulder, elbow, wrist: add(elbow, SEG.forearm, 90 - sgn * swing) };
+  };
+  return assemble({ l: runLeg(t, hip), r: runLeg(t + SYNTH.runStride / 2, hip) }, { l: arm(1), r: arm(-1) }, add(shoulder, 0.2, 8));
+}
+
 /** Body configuration in metres (x right, y up, origin at the ground under the subject). */
 export function syntheticBody(t: number, activity: SyntheticActivity): Partial<Record<LandmarkName, P>> {
   if (activity === 'raise') {
     const s = 0.5 * (1 - Math.cos((2 * Math.PI * t) / SYNTH.raisePeriod));
     return frontal(10 + (SYNTH.raiseMaxLeft - 10) * s, 10 + (SYNTH.raiseMaxRight - 10) * s);
   }
+  if (activity === 'cycle') return cyclist(t);
+  if (activity === 'run') return runner(t);
   if (activity === 'squat') {
     const s = 0.5 * (1 - Math.cos((2 * Math.PI * t) / SYNTH.squatPeriod));
     return sagittal(5 + 25 * s, 5 + 75 * s, 5 + 35 * s, 80 * s, 0, 0);
