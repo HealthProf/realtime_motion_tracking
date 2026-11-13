@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Real-time markerless motion tracking and kinematic measurement in the browser, for teaching biomechanics. All processing stays on your device.">
+  <meta name="theme-color" content="#0b1220">
+  <title>Real-Time Motion Lab</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <a class="skip" href="#panel">Skip to controls</a>
+  <header class="top">
+    <h1>Real-Time Motion Lab</h1>
+    <div class="chips" aria-label="Status">
+      <span class="chip" id="status-fps" title="Measured camera frame rate">-- fps</span>
+      <span class="chip" id="status-model">no source</span>
+      <span class="chip" id="status-units" title="Length units of linear measurements">pixels (uncalibrated)</span>
+      <a class="chip link" href="methods.html">Methods and limitations</a>
+    </div>
+  </header>
+  <p id="status-msg" class="status" role="status" aria-live="polite"></p>
+
+  <main>
+    <section class="stage-col" aria-label="Live view">
+      <div id="stage">
+        <canvas id="view" width="1280" height="720" role="img" aria-label="Live camera view with skeleton and measurement overlays"></canvas>
+        <video id="cam" playsinline muted hidden></video>
+        <div id="start-panel">
+          <h2>Start</h2>
+          <p>Measure joint angles, velocities and accelerations live from your camera. Video is processed on this device and is never uploaded.</p>
+          <div class="row">
+            <button id="btn-start-camera" class="primary">Start camera</button>
+            <span class="or">or</span>
+            <label>Demo without a camera
+              <select id="demo-activity">
+                <option value="squat">Squat (side view)</option>
+                <option value="jump">Vertical jump (side view)</option>
+                <option value="raise">Arm raise (front view)</option>
+                <option value="cycle">Cycling on a trainer (side view)</option>
+                <option value="run">Treadmill running (side view)</option>
+              </select>
+            </label>
+            <button id="btn-start-demo">Run demo</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="transport" role="toolbar" aria-label="Capture controls">
+        <button id="btn-trial" class="primary" disabled aria-keyshortcuts="Space">Start trial <kbd>Space</kbd></button>
+        <button id="btn-mark" disabled aria-keyshortcuts="M">Mark key moment <kbd>M</kbd></button>
+        <button id="btn-shot" disabled aria-keyshortcuts="S">Screenshot <kbd>S</kbd></button>
+        <button id="btn-replay" disabled aria-keyshortcuts="R">Instant replay <kbd>R</kbd></button>
+        <label class="inline"><input type="checkbox" id="chk-video" checked> Record video with trial</label>
+        <span id="trial-clock" class="clock" aria-live="off"></span>
+      </div>
+
+      <div id="replay-bar" hidden role="group" aria-label="Instant replay">
+        <button id="replay-prev" aria-label="Previous frame">&#9664;</button>
+        <button id="replay-play">Play</button>
+        <button id="replay-next" aria-label="Next frame">&#9654;</button>
+        <label class="grow">Position <input type="range" id="replay-slider" min="0" max="0" value="0"></label>
+        <span id="replay-time" class="clock"></span>
+        <label>Speed
+          <select id="replay-speed"><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option></select>
+        </label>
+        <button id="replay-save">Analyse as trial</button>
+        <button id="replay-exit" class="primary">Back to live</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Live measurements <span class="tag" title="Smoothed with a causal filter, so values lag slightly. Exported data are re-filtered without lag.">live estimate</span></h2>
+          <label>Plot
+            <select id="live-chart-mode">
+              <option value="angle">Angles</option>
+              <option value="vel">Angular velocity</option>
+              <option value="speed">Point speed</option>
+            </select>
+          </label>
+        </div>
+        <canvas id="live-chart" class="chart" role="img" aria-label="Live plot of the selected measurements over the last ten seconds"></canvas>
+        <div id="live-legend" class="legend"></div>
+        <div class="table-wrap">
+          <table id="readouts">
+            <caption class="sr">Current values of the selected measurements</caption>
+            <thead><tr><th scope="col">Measurement</th><th scope="col">Value</th><th scope="col">Rate</th><th scope="col" class="col3d">3D (experimental)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <section class="card" id="results" hidden aria-labelledby="results-h">
+        <div class="card-head">
+          <h2 id="results-h">Trial results</h2>
+          <span id="res-summary" class="muted"></span>
+        </div>
+        <ul id="res-warnings" class="warnings"></ul>
+        <div class="row">
+          <label>Low-pass cutoff (Hz) <input type="number" id="cutoff" min="1" max="30" step="0.5" value="6"></label>
+          <button id="btn-reprocess">Re-filter</button>
+          <button id="btn-suggest" title="Residual analysis (Winter) on the first selected angle">Suggest cutoff</button>
+          <label>Plot
+            <select id="res-series"></select>
+          </label>
+        </div>
+        <canvas id="res-chart" class="chart tall" role="img" aria-label="Plot of processed trial data"></canvas>
+        <div id="res-legend" class="legend"></div>
+        <div class="table-wrap"><table id="res-table"><caption>Summary (zero-phase filtered)</caption><thead></thead><tbody></tbody></table></div>
+        <div id="res-mode"></div>
+        <div id="res-reps"></div>
+        <div id="res-symmetry"></div>
+        <div id="res-jump"></div>
+        <label class="block">Notes (saved in the exports)
+          <textarea id="notes" rows="2" placeholder="Subject code, condition, camera distance..."></textarea>
+        </label>
+        <div class="row">
+          <button id="btn-csv" class="primary">Download kinematics CSV</button>
+          <label class="inline"><input type="checkbox" id="chk-csv-meta" checked> include methods header</label>
+          <button id="btn-raw">Raw landmarks CSV</button>
+          <button id="btn-session">Session file</button>
+          <button id="btn-video-dl" hidden>Video</button>
+        </div>
+      </section>
+
+      <section class="card" id="teach" hidden aria-labelledby="teach-h">
+        <div class="card-head"><h2 id="teach-h">Why filtering matters</h2></div>
+        <p class="muted">Differentiation amplifies noise. Compare the same signal with and without low-pass filtering, change the cutoff, and simulate a slower camera.</p>
+        <div class="row">
+          <label>Signal <select id="teach-signal"></select></label>
+          <label>Cutoff <input type="range" id="teach-cutoff" min="1" max="15" step="0.5" value="6"> <output id="teach-cutoff-out">6 Hz</output></label>
+          <label>Frame rate
+            <select id="teach-decimate"><option value="1">as recorded</option><option value="2">half</option><option value="3">one third</option><option value="4">one quarter</option></select>
+          </label>
+        </div>
+        <div class="grid2">
+          <figure><figcaption>Position</figcaption><canvas id="teach-pos" class="chart" role="img" aria-label="Raw and filtered position"></canvas></figure>
+          <figure><figcaption>Velocity (first derivative)</figcaption><canvas id="teach-vel" class="chart" role="img" aria-label="Velocity from raw and filtered data"></canvas></figure>
+          <figure><figcaption>Acceleration (second derivative)</figcaption><canvas id="teach-acc" class="chart" role="img" aria-label="Acceleration from raw and filtered data"></canvas></figure>
+          <figure><figcaption>Residual analysis</figcaption><canvas id="teach-res" class="chart" role="img" aria-label="Residual between raw and filtered signal against cutoff frequency"></canvas></figure>
+        </div>
+        <div class="legend"><span class="legend-item"><span class="swatch dashed" style="--c:#94a3b8"></span>from raw data</span><span class="legend-item"><span class="swatch" style="--c:#f59e0b"></span>from filtered data</span></div>
+        <p id="teach-text" role="status"></p>
+      </section>
+
+      <section class="card" id="gallery-card" hidden aria-labelledby="gallery-h">
+        <div class="card-head"><h2 id="gallery-h">Screenshots and key moments</h2><button id="btn-gallery-all">Download all</button></div>
+        <div id="gallery"></div>
+      </section>
+    </section>
+
+    <aside id="panel" aria-label="Controls" tabindex="-1">
+      <details open>
+        <summary>Camera and setup</summary>
+        <div class="fields">
+          <label>Camera <select id="camera"><option value="">Default camera</option></select></label>
+          <label>Requested frame rate
+            <select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps (if available)</option></select>
+          </label>
+          <label>Pose model
+            <select id="tier">
+              <option value="lite">Lite (fastest, phones)</option>
+              <option value="full">Full (balanced)</option>
+              <option value="heavy">Heavy (most accurate, 30 MB)</option>
+            </select>
+          </label>
+          <label class="inline"><input type="checkbox" id="mirror"> Mirror view (selfie style)</label>
+          <div class="row"><button id="btn-stop" disabled>Stop source</button><button id="btn-tilt">Use tilt sensor</button></div>
+        </div>
+        <h3>Setup coach</h3>
+        <ul id="coach" class="coach"><li class="na">Start the camera to check your setup.</li></ul>
+      </details>
+
+      <details open>
+        <summary>Activity and measurements</summary>
+        <div class="fields">
+          <label>Activity <select id="preset"></select></label>
+          <p id="preset-guidance" class="muted"></p>
+          <div id="mode-bike" class="fields" hidden>
+            <p class="muted">Optional tape measurements for a saddle-height cross-check.</p>
+            <label>Inseam (cm) <input type="number" id="inseam" min="50" max="110" step="0.5" placeholder="e.g. 82"></label>
+            <label>Saddle height, bottom bracket centre to saddle top (cm) <input type="number" id="saddle" min="50" max="110" step="0.5" placeholder="e.g. 73"></label>
+          </div>
+          <div id="mode-run" class="fields" hidden>
+            <label>Treadmill speed (km/h), used for step length <input type="number" id="speed" min="3" max="30" step="0.1" placeholder="e.g. 10"></label>
+          </div>
+          <label>Side
+            <select id="side"><option value="auto">Auto (nearest the camera)</option><option value="left">Left</option><option value="right">Right</option><option value="both">Both</option></select>
+          </label>
+          <fieldset id="angle-list"><legend>Angles</legend></fieldset>
+          <fieldset id="point-list"><legend>Points (position, velocity, acceleration)</legend></fieldset>
+          <label>Angle convention
+            <select id="convention"><option value="anatomical">Anatomical (0&deg; = neutral)</option><option value="included">Included (geometric)</option></select>
+          </label>
+          <label>Body model for centre of mass
+            <select id="bodymodel"><option value="average">Average of male and female</option><option value="female">Female (de Leva 1996)</option><option value="male">Male (de Leva 1996)</option></select>
+          </label>
+          <label>Minimum landmark confidence <output id="minvis-out">0.50</output>
+            <input type="range" id="minvis" min="0.2" max="0.9" step="0.05" value="0.5">
+          </label>
+          <label class="inline"><input type="checkbox" id="include3d"> Show estimated 3D joint angles (experimental)</label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Calibration (real units)</summary>
+        <div class="fields">
+          <p class="muted">Place an object of known length in the plane of motion (same distance from the camera as the subject), then click its two ends in the picture.</p>
+          <label>Known length (m) <input type="number" id="cal-length" min="0.05" step="0.01" value="1.00"></label>
+          <button id="btn-cal-pick">Pick two points on the picture</button>
+          <p class="muted">Fallback, less accurate: stand upright and use body height.</p>
+          <label>Subject height (m) <input type="number" id="cal-height" min="0.5" max="2.5" step="0.01" value="1.70"></label>
+          <button id="btn-cal-height">Calibrate from standing height</button>
+          <div class="row"><button id="btn-origin">Click to set origin</button><button id="btn-origin-feet">Origin at feet</button><button id="btn-cal-reset">Reset</button></div>
+          <p id="cal-status" role="status" class="muted">Not calibrated. Angles are unaffected; lengths are in pixels.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Layers</summary>
+        <div class="fields">
+          <label>Video opacity <input type="range" id="ly-video" min="0" max="1" step="0.05" value="1"></label>
+          <label class="inline"><input type="checkbox" id="ly-skeleton" checked> Stick figure</label>
+          <label class="inline"><input type="checkbox" id="ly-labels" checked> Angle labels</label>
+          <label class="inline"><input type="checkbox" id="ly-trails" checked> Point trails</label>
+          <label class="inline"><input type="checkbox" id="ly-com" checked> Centre of mass</label>
+          <label class="inline"><input type="checkbox" id="ly-axes"> Coordinate axes</label>
+          <label class="inline"><input type="checkbox" id="ly-bones"> Bones</label>
+          <label>Bone opacity <input type="range" id="ly-bones-op" min="0.1" max="1" step="0.05" value="0.85"></label>
+          <label class="inline"><input type="checkbox" id="ly-muscles"> Muscles</label>
+          <label>Muscle opacity <input type="range" id="ly-muscles-op" min="0.1" max="1" step="0.05" value="0.6"></label>
+          <label>Highlight muscles crossing
+            <select id="ly-highlight"><option value="">No highlight</option></select>
+          </label>
+          <ul id="muscle-list" class="muscles"></ul>
+          <fieldset id="system-list"><legend>More anatomy</legend></fieldset>
+          <label>Opacity of these layers <input type="range" id="ly-systems-op" min="0.1" max="1" step="0.05" value="0.85"></label>
+          <p class="muted">All anatomy layers are a generic schematic for an average adult, fitted to the tracked joints. They show roughly where structures lie, not this person's anatomy. Organ positions in particular vary with breathing, posture and build. Moving highlights on vessels show the direction of blood flow at a nominal rate: they are not a measurement of this person's pulse or circulation, and muscles are not shown as active or inactive.</p>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Find anatomy</summary>
+        <div class="fields">
+          <label for="find-input">Structure name</label>
+          <div class="find-box">
+            <input type="text" id="find-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="find-list" autocomplete="off" spellcheck="false" placeholder="e.g. femur, ACL, liver, sciatic">
+            <button id="find-clear" hidden>Clear</button>
+          </div>
+          <ul id="find-list" role="listbox" aria-label="Matching structures" hidden></ul>
+          <p id="find-status" role="status" class="muted">Type a name. If the structure is in the picture it is circled; if not, an arrow shows which way to move the camera.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Load a saved session</summary>
+        <div class="fields">
+          <label>Session file (.json) <input type="file" id="file-session" accept="application/json,.json"></label>
+        </div>
+      </details>
+      <p class="muted version" id="version"></p>
+    </aside>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
