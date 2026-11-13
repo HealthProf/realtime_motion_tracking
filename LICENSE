@@ -1,0 +1,109 @@
+Real-Time Motion Lab Educational Non-Commercial License
+Version 1.0
+
+Copyright (c) 2026 HealthProf (https://github.com/HealthProf). All rights reserved
+except as expressly granted below.
+
+1. Definitions
+
+"Software" means the Real-Time Motion Lab application in this repository: its
+source code, built files, documentation, and original artwork.
+
+"Licensor" means the copyright holder named above.
+
+"Educational Purposes" means teaching, learning, coursework, classroom or
+laboratory demonstration, student projects, and non-commercial academic study,
+whether at a school, college, university, or by an individual learner.
+
+"Commercial Use" means any use intended for or directed toward commercial
+advantage or monetary compensation. This includes selling the Software or
+access to it, using it to provide paid services (for example paid coaching,
+bike fitting, gait analysis, or clinical services), bundling it with a paid
+product or course whose fee is charged specifically for the Software, and using
+it within a for-profit business for that business's benefit. Charging ordinary
+tuition for a course in which the Software is used as a teaching aid is not,
+by itself, Commercial Use.
+
+"Modify" means to alter, adapt, translate, or create a derivative work of the
+Software, including by incorporating any substantial part of it into other
+software.
+
+2. Permission granted
+
+Subject to the conditions of this License, the Licensor grants you a
+worldwide, royalty-free, non-exclusive, non-transferable permission to:
+
+  (a) use and run the Software for Educational Purposes;
+  (b) copy and share unmodified copies of the Software for Educational
+      Purposes, provided each copy includes this License; and
+  (c) read and study the source code.
+
+3. No commercial use
+
+You may not make Commercial Use of the Software without the Licensor's prior
+written permission.
+
+4. Alterations require approval
+
+You may not Modify the Software, or distribute or publicly host a Modified
+version, without the Licensor's prior written approval. Approval may be given
+subject to conditions. Unless the approval says otherwise, an approved
+Modified version remains under this License, must state clearly that it has
+been changed, and must keep the credit required by Section 5.
+
+Changing your own settings within the Software, and exporting or analysing
+your own data from it, is not Modifying it.
+
+5. Credit
+
+Any copy, public deployment, or approved Modified version of the Software
+must keep this License and all copyright notices, and must display the credit:
+
+    Real-Time Motion Lab by HealthProf
+    https://github.com/HealthProf/realtime_motion_tracking
+
+If you present or publish results, figures, screenshots, or video produced
+with the Software (for example in course materials, presentations, theses, or
+papers), you must credit the Software by name and link in the same way.
+
+You may not suggest that the Licensor endorses you or your use.
+
+6. Requesting permission
+
+Requests for commercial use, or for approval to Modify the Software, should be
+made by opening an issue at
+https://github.com/HealthProf/realtime_motion_tracking/issues or by contacting
+the Licensor directly. Permission is valid only if given in writing by the
+Licensor. Silence is not permission.
+
+7. Third-party components
+
+The Software uses components owned by others, which remain under their own
+licenses and are not covered by this License. See THIRD-PARTY-NOTICES.md.
+Nothing in this License limits rights you have under those licenses.
+
+8. Not a medical device; no warranty
+
+The Software is a teaching tool. It is not a medical device, has not been
+validated for clinical, diagnostic, or safety-critical use, and must not be
+relied on for decisions about health, injury, or treatment.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AND NONINFRINGEMENT. TO THE
+MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE LICENSOR OR
+CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN
+AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+9. Termination
+
+This License ends automatically if you breach it. If the breach is
+unintentional and you correct it within 30 days of becoming aware of it, your
+permission is reinstated. When the License ends you must stop using and
+distributing the Software.
+
+10. Reservation of rights
+
+All rights not expressly granted are reserved by the Licensor. The Licensor
+may offer the Software under different terms to anyone at any time.

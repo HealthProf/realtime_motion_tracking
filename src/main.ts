@@ -687,7 +687,7 @@ function init(): void {
   }
   $<HTMLSelectElement>('tier').value = settings.tier;
   $<HTMLInputElement>('mirror').checked = settings.mirror;
-  $('version').textContent = `Version ${__APP_VERSION__}. Runs entirely in your browser.`;
+  $('version').innerHTML = `Real-Time Motion Lab by <a href="https://github.com/HealthProf/realtime_motion_tracking">HealthProf</a>, version ${__APP_VERSION__}. Free for educational use; no commercial use or alteration without permission (<a href="https://github.com/HealthProf/realtime_motion_tracking/blob/main/LICENSE">license</a>). Runs entirely in your browser.`;
   applyPreset(true);
   calStatus();
   updateReadouts(null);
