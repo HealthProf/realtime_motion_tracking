@@ -9,7 +9,7 @@ device: no video or data is uploaded.
 - Tracks a 33-point skeleton on the person in frame (MediaPipe Pose Landmarker; Lite, Full and Heavy models).
 - Measures joint and segment angles, angular velocity and acceleration, and the position, velocity,
   acceleration and path length of any keypoint or the estimated centre of mass.
-- Calibrates to metres from a reference object (or, less accurately, standing height).
+- Calibrates to metres from a reference object, a weight plate, or (less accurately) standing height.
 - Records trials and re-filters them without lag (zero-phase Butterworth) before export.
 - Exports a kinematics CSV with a methods header, a raw landmark CSV, a reloadable session file,
   PNG screenshots of key moments, and a local video with the overlays.
@@ -24,10 +24,21 @@ device: no video or data is uploaded.
   which way to move the camera if it is not.
 - Bike fit mode (indoor trainer) and running gait mode (treadmill): per-cycle measurements compared with
   sourced reference ranges, stated uncertainty, and options to try and re-measure.
+- Video files: load a recorded clip instead of the camera, play it with live measurements, or step
+  through every frame for a trial with no skipped frames. Slow-motion factor for high-speed footage.
+- Planes of motion and axes of rotation drawn on the person, each with its own toggle, plus a fixed
+  three-plane guide figure that marks which plane the camera is looking at.
+- Teaching overlays: line of gravity and base of support, velocity vectors (including v = ωr),
+  the static moment of gravity about a joint with its moment arm, and live angle-angle plots.
+- Weight lifting mode: follows the barbell plate, calibrates from the plate diameter, and reports
+  per-lift range, mean, propulsive and peak velocity, force, work and power for a typed-in load.
+- Rough calibration from your own height with a countdown, so one person can set it up alone.
 - A "Why filtering matters" panel that shows how differentiation amplifies noise.
 - Works offline after the first visit. A demo mode with synthetic data needs no camera.
 
 Read `public/methods.html` (linked in the app as "Methods and limitations") before using the numbers.
+Weight lifting mode has been checked against synthetic lifts with known answers, not yet against
+real lifts measured with a position transducer or force plate.
 The short version: this is a teaching tool, planar angles are only valid when the movement is perpendicular
 to the camera, and acceleration is the least reliable output.
 
@@ -54,7 +65,10 @@ npm run dev
 | `npm run build` | Type-check and build to `dist/` |
 | `npm run e2e` | Browser smoke test against the build (needs Playwright with Chromium installed) |
 
-Append `?demo=squat`, `?demo=jump`, `?demo=raise`, `?demo=cycle` or `?demo=run` to the URL to start the synthetic demo directly.
+The smoke test can also check frame-by-frame video analysis: set `TEST_VIDEO` to a clip and
+`TEST_VIDEO_FRAMES` to its frame count (needs `npm run assets`).
+
+Append `?demo=squat`, `?demo=jump`, `?demo=raise`, `?demo=cycle`, `?demo=run` or `?demo=lift` to the URL to start the synthetic demo directly.
 
 ## Deploying to GitHub Pages
 
@@ -66,13 +80,15 @@ Camera access requires HTTPS, which GitHub Pages provides.
 
 ```
 src/kinematics/   filters, resampling, derivatives, angles, calibration (pure functions)
-src/analysis/     centre of mass, repetitions, symmetry, jump, residual analysis
+src/analysis/     centre of mass, repetitions, symmetry, jump, residual analysis, body planes,
+                  static joint moments, standing-height calibration
+src/lift/         plate detection and tracking, barbell mechanics
 src/capture/      trials, processing, CSV/session export, video, replay buffer
 src/pose/         pose model wrapper, keypoint topology, synthetic demo poses
 src/coach/        setup checks
-src/anatomy/      schematic anatomy layers, structure catalog, search
+src/anatomy/      schematic anatomy layers (bones, muscles, systems), structure catalog, search
 src/modes/        bike fit and running gait analysis, reference ranges, reports
-src/render/       canvas overlay and charts
+src/render/       canvas overlay, teaching overlays and charts
 src/presets/      activity presets (data only)
 src/ui/, main.ts  interface wiring
 tests/unit/       Vitest
