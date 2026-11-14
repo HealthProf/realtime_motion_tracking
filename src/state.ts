@@ -46,6 +46,9 @@ export const settings = {
   plateDiameterM: 0.45,
   /** Video files: how many times slower than real life the footage plays. */
   slowMotion: 1,
+  /** Delayed view: show the picture and measurements from this many seconds ago (camera and demo only). */
+  delayOn: false,
+  delaySeconds: 10,
 };
 
 export const layers: Layers = {

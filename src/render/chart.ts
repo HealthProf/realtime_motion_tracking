@@ -22,6 +22,8 @@ export interface ChartOptions {
   dots?: { x: number; y: number; color?: string }[];
   /** Use the same scale on both axes (for paths in space). */
   equal?: boolean;
+  /** Enlarges text, margins and line widths together (for reading from a distance). Default 1. */
+  scale?: number;
 }
 
 export const PALETTE = ['#f59e0b', '#22d3ee', '#a78bfa', '#4ade80', '#fb7185', '#facc15', '#60a5fa', '#f472b6'];
@@ -36,13 +38,15 @@ const fmt = (v: number, step: number) => (step >= 1 ? v.toFixed(0) : step >= 0.1
 
 export function drawChart(canvas: HTMLCanvasElement, series: Series[], o: ChartOptions = {}): void {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const cw = canvas.clientWidth || 600, ch = canvas.clientHeight || 180;
-  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
-    canvas.width = Math.round(cw * dpr);
-    canvas.height = Math.round(ch * dpr);
+  const pxW = canvas.clientWidth || 600, pxH = canvas.clientHeight || 180;
+  if (canvas.width !== Math.round(pxW * dpr) || canvas.height !== Math.round(pxH * dpr)) {
+    canvas.width = Math.round(pxW * dpr);
+    canvas.height = Math.round(pxH * dpr);
   }
+  // Everything below is laid out in units of 1/zoom CSS pixels, so a zoom above 1 enlarges it all evenly.
+  const zoom = o.scale && o.scale > 0 ? o.scale : 1, cw = pxW / zoom, ch = pxH / zoom;
   const ctx = canvas.getContext('2d')!;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);
   const css = getComputedStyle(canvas);
   const fg = css.getPropertyValue('--chart-fg').trim() || '#cbd5e1';
   const grid = css.getPropertyValue('--chart-grid').trim() || 'rgba(148,163,184,0.25)';

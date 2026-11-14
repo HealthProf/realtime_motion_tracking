@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { clampDelay, delayWidth, pickDelayed } from '../../src/capture/delay';
 import { detectJumps, G } from '../../src/analysis/jump';
 import { detectReps, peakAbs, rangeOf, symmetryIndex } from '../../src/analysis/reps';
 import { residualAnalysis } from '../../src/analysis/residual';
@@ -152,5 +153,56 @@ describe('live engine', () => {
     expect(Number.isFinite(sample!.angles.get('l_knee')!.value3d)).toBe(true);
     const lost = live.process({ t: 3.1, w: 1, h: 1, lm: null, world: null }, s);
     expect(lost.angles.size).toBe(0);
+  });
+});
+
+describe('delayed view', () => {
+  const at = (times: number[]) => (i: number) => times[i];
+  const fps30 = (from: number, to: number) => Array.from({ length: Math.round((to - from) * 30) + 1 }, (_, i) => from + i / 30);
+
+  it('picks the frame captured the chosen number of seconds ago', () => {
+    const times = fps30(100, 130);
+    for (const d of [5, 10, 29.5]) {
+      const pick = pickDelayed(at(times), times.length, 130, d);
+      expect(pick.wait).toBe(0);
+      const err = 130 - d - times[pick.index];
+      expect(err).toBeGreaterThanOrEqual(0);
+      expect(err).toBeLessThan(1 / 30 + 1e-9);
+    }
+  });
+
+  it('counts down while the buffer does not reach back far enough', () => {
+    expect(pickDelayed(at([]), 0, 50, 10)).toEqual({ index: -1, wait: 10 });
+    const times = fps30(100, 104);
+    const pick = pickDelayed(at(times), times.length, 104, 10);
+    expect(pick.index).toBe(-1);
+    expect(pick.wait).toBeCloseTo(6, 6);
+  });
+
+  it('does not show a frame from the wrong time across a pause in capture', () => {
+    // Capture stopped from 110 s to 118 s (for example during instant replay).
+    const times = [...fps30(100, 110), ...fps30(118, 130)];
+    const inGap = pickDelayed(at(times), times.length, 124, 10);
+    expect(inGap.index).toBe(-1);
+    expect(inGap.wait).toBeCloseTo(4, 6);
+    const before = pickDelayed(at(times), times.length, 119, 10);
+    expect(times[before.index]).toBeCloseTo(109, 1);
+    const after = pickDelayed(at(times), times.length, 129, 10);
+    expect(times[after.index]).toBeCloseTo(119, 1);
+  });
+
+  it('stores a smaller picture for longer delays so that pixels times seconds stays level', () => {
+    expect(delayWidth(61, 640, 1280)).toBe(640);
+    expect(delayWidth(5, 640, 1280)).toBe(1280);
+    const widths = [20, 30, 45, 60].map((s) => delayWidth(s, 640, 1280));
+    for (let i = 1; i < widths.length; i++) expect(widths[i]).toBeLessThan(widths[i - 1]);
+    for (const s of [20, 30, 45, 60]) expect((delayWidth(s, 640, 1280) ** 2 * s) / (640 ** 2 * 60)).toBeCloseTo(1, 2);
+  });
+
+  it('keeps the delay between 5 and 60 whole seconds', () => {
+    expect(clampDelay(2)).toBe(5);
+    expect(clampDelay(75)).toBe(60);
+    expect(clampDelay(12.4)).toBe(12);
+    expect(clampDelay(NaN)).toBe(10);
   });
 });

@@ -25,31 +25,41 @@
 
   <main>
     <section class="stage-col" aria-label="Live view">
-      <div id="stage">
-        <canvas id="view" width="1280" height="720" role="img" aria-label="Live camera view with skeleton and measurement overlays"></canvas>
-        <video id="cam" playsinline muted hidden></video>
-        <div id="start-panel">
-          <h2>Start</h2>
-          <p>Measure joint angles, velocities and accelerations live from your camera. Video is processed on this device and is never uploaded.</p>
-          <div class="row">
-            <button id="btn-start-camera" class="primary">Start camera</button>
-            <span class="or">or</span>
-            <label>Demo without a camera
-              <select id="demo-activity">
-                <option value="squat">Squat (side view)</option>
-                <option value="jump">Vertical jump (side view)</option>
-                <option value="raise">Arm raise (front view)</option>
-                <option value="cycle">Cycling on a trainer (side view)</option>
-                <option value="run">Treadmill running (side view)</option>
-                <option value="lift">Barbell squat (side view)</option>
-              </select>
-            </label>
-            <button id="btn-start-demo">Run demo</button>
+      <div id="fs-root">
+        <div id="fs-bar" hidden role="toolbar" aria-label="Full screen display options"></div>
+        <div id="stage">
+          <canvas id="view" width="1280" height="720" role="img" aria-label="Live camera view with skeleton and measurement overlays"></canvas>
+          <video id="cam" playsinline muted hidden></video>
+          <div id="start-panel">
+            <h2>Start</h2>
+            <p>Measure joint angles, velocities and accelerations live from your camera. Video is processed on this device and is never uploaded.</p>
+            <div class="row">
+              <button id="btn-start-camera" class="primary">Start camera</button>
+              <span class="or">or</span>
+              <label>Demo without a camera
+                <select id="demo-activity">
+                  <option value="squat">Squat (side view)</option>
+                  <option value="jump">Vertical jump (side view)</option>
+                  <option value="raise">Arm raise (front view)</option>
+                  <option value="cycle">Cycling on a trainer (side view)</option>
+                  <option value="run">Treadmill running (side view)</option>
+                  <option value="lift">Barbell squat (side view)</option>
+                </select>
+              </label>
+              <button id="btn-start-demo">Run demo</button>
+            </div>
+            <div class="row">
+              <label>Or analyse a recorded video (stays on this device)
+                <input type="file" id="file-video" accept="video/*">
+              </label>
+            </div>
           </div>
-          <div class="row">
-            <label>Or analyse a recorded video (stays on this device)
-              <input type="file" id="file-video" accept="video/*">
-            </label>
+        </div>
+        <div id="fs-strip" hidden>
+          <div id="fs-tiles" role="group" aria-label="Measurements"></div>
+          <div id="fs-plot">
+            <canvas id="fs-chart" role="img" aria-label="Plot of the selected measurements over the last ten seconds"></canvas>
+            <div id="fs-legend" class="legend"></div>
           </div>
         </div>
       </div>
@@ -59,8 +69,21 @@
         <button id="btn-mark" disabled aria-keyshortcuts="M">Mark key moment <kbd>M</kbd></button>
         <button id="btn-shot" disabled aria-keyshortcuts="S">Screenshot <kbd>S</kbd></button>
         <button id="btn-replay" disabled aria-keyshortcuts="R">Instant replay <kbd>R</kbd></button>
+        <button id="btn-fs" aria-keyshortcuts="F" title="Fills the screen with the picture, with optional measurements and plot along the bottom">Full screen <kbd>F</kbd></button>
         <label class="inline"><input type="checkbox" id="chk-video" checked> Record video with trial</label>
         <span id="trial-clock" class="clock" aria-live="off"></span>
+      </div>
+
+      <div id="delay-bar" role="group" aria-label="Delayed view">
+        <label class="inline"><input type="checkbox" id="delay-on" aria-keyshortcuts="D"> Delayed view <kbd>D</kbd></label>
+        <div class="delay-set">
+          <p id="delay-note" class="muted"></p>
+          <label>Delay
+            <input type="range" id="delay-seconds" min="5" max="60" step="1" value="10" aria-describedby="delay-note">
+            <output id="delay-out" for="delay-seconds" class="clock">10 s</output>
+          </label>
+          <p id="delay-state" class="muted"></p>
+        </div>
       </div>
 
       <div id="video-bar" hidden role="group" aria-label="Video file controls">
@@ -93,7 +116,7 @@
 
       <div class="card">
         <div class="card-head">
-          <h2>Live measurements <span class="tag" title="Smoothed with a causal filter, so values lag slightly. Exported data are re-filtered without lag.">live estimate</span></h2>
+          <h2>Live measurements <span class="tag" id="live-tag" title="Smoothed with a causal filter, so values lag slightly. Exported data are re-filtered without lag.">live estimate</span></h2>
           <label>Plot
             <select id="live-chart-mode">
               <option value="angle">Angles</option>
