@@ -24,7 +24,7 @@ import { Landmarker } from './pose/landmarker';
 import { L, POINT_LABELS, SKELETON, TRACKABLE_POINTS, type PointId } from './pose/landmarks';
 import { syntheticBar, syntheticFrame, SYNTH, type SyntheticActivity } from './pose/synthetic';
 import { PRESETS, PRESET_BY_ID, resolvePreset } from './presets/presets';
-import { drawChart, legendHtml, PALETTE, type Series } from './render/chart';
+import { drawChart, legendHtml, PALETTE, type ChartOptions, type Series } from './render/chart';
 import { drawScene, SIDE_COLOR } from './render/overlay';
 import { $, cal, esc, f, isMobile, layers, say, settings } from './state';
 import type { BarObs, Lm, ModelTier, PoseFrame, TimestampSource } from './types';
@@ -43,6 +43,9 @@ const REPLAY_SECONDS = isMobile ? 10 : 20, REPLAY_WIDTH = isMobile ? 480 : 640;
 const DELAY_MAX_WIDTH = isMobile ? 960 : 1280;
 const replay = new ReplayBuffer(REPLAY_SECONDS, REPLAY_WIDTH, (isMobile ? 96 : 192) * 1e6);
 const player = new ReplayPlayer();
+/** Full screen: which panels are shown, and which measurements have been hidden there. */
+const fs = { on: false, metrics: true, chart: true, inset: true, hidden: new Set<string>(), idleTimer: 0, barHtml: '', wakeLock: null as { release: () => Promise<void> } | null };
+const BAR_COLOR = '#a3e635';
 /** Delayed view: the buffered frame now on screen, and the live picture for the corner inset. */
 const delay = { player: new ReplayPlayer(), busy: false, last: null as ReplayEntry | null, shown: null as LiveSample | null, liveBg: null as CanvasImageSource | null, liveMirror: false };
 const MAX_TRIAL_SECONDS = 120;
@@ -113,6 +116,7 @@ function applyPreset(announce = false): void {
   $('mode-run').hidden = !p.analysis.includes('run');
   $('mode-lift').hidden = !p.analysis.includes('lift');
   if (!p.analysis.includes('lift')) { tracker.release(); proposal = null; barTrail = []; }
+  renderFsBar();
   if (announce) {
     settings.cutoff = p.cutoff;
     $<HTMLInputElement>('cutoff').value = String(p.cutoff);
@@ -130,6 +134,7 @@ function selectionChanged(): void {
     sel.innerHTML = settings.angles.map((a) => `<option value="${a}">${esc(ANGLE_BY_ID.get(a)?.label ?? a)}</option>`).join('');
     sel.value = settings.angles.includes(prev) ? prev : settings.angles[id === 'live-aa-x' ? 0 : Math.min(1, settings.angles.length - 1)] ?? '';
   }
+  renderFsBar();
   if (hasTrial()) reprocess();
 }
 
@@ -179,7 +184,7 @@ function render(sample: LiveSample | null, bg: CanvasImageSource | null, mirrorB
   if (source?.kind === 'synthetic') hud.push('DEMO: synthetic data');
   const lift = isLift();
   const res = drawScene(ctx, {
-    w, h, bg, mirrorBg, sample, layers, angles: settings.angles, minVisibility: settings.minVisibility, calibration: cal.current,
+    w, h, bg, mirrorBg, sample, layers, angles: fs.on ? settings.angles.filter((id) => !fs.hidden.has(`angle:${id}`)) : settings.angles, minVisibility: settings.minVisibility, calibration: cal.current,
     mirrored: settings.mirror && source?.kind === 'camera', trails: trailsFrom(trailSamples), picks, hud, recording: recorder.recording, time: animTime(),
     bodyModel: settings.bodyModel, bodyMassKg: settings.bodyMassKg, loadKg: lift ? settings.liftLoadKg || 0 : settings.handLoadKg,
     barTrail: !lift ? [] : rp || delayActive() ? trailSamples.flatMap((x) => (x.bar ? [{ x: x.bar.px, y: x.bar.py }] : [])) : barTrail,
@@ -221,6 +226,7 @@ function updateReadouts(s: LiveSample | null): void {
     rows.unshift(`<tr><td><strong>${mode === 'bike' ? 'Cadence' : 'Step rate'}</strong></td><td>${Number.isFinite(c) ? `${(mode === 'bike' ? c : 2 * c).toFixed(0)} ${mode === 'bike' ? 'rev/min' : 'steps/min'}` : '\u2013'}</td><td class="low">last ${HISTORY_SECONDS} s</td><td class="col3d"></td></tr>`);
   }
   $('readouts').querySelector('tbody')!.innerHTML = rows.join('') || '<tr><td colspan="4" class="low">No measurements selected.</td></tr>';
+  if (fs.on && fs.metrics) updateFsTiles(s);
 }
 
 /** Cycles per minute of the first selected knee angle over the live history window. */
@@ -267,37 +273,45 @@ function updateLiveRep(): void {
   liveRep = done[done.length - 1] ?? null;
 }
 
-function updateLiveChart(): void {
+/** A plotted line, with the key of the measurement it belongs to (for the full-screen show and hide buttons). */
+type KeyedSeries = Series & { key?: string };
+
+function liveChartSpec(): { series: KeyedSeries[]; opts: ChartOptions } {
   const mode = $<HTMLSelectElement>('live-chart-mode').value;
   const now = history.t[history.t.length - 1] ?? 0;
   const x = history.t.map((t) => t - now);
-  $('live-aa').hidden = mode !== 'aa';
   if (mode === 'aa') {
     const ax = $<HTMLSelectElement>('live-aa-x').value, ay = $<HTMLSelectElement>('live-aa-y').value;
     const sx = history.series.get(`angle:${ax}`) ?? [], sy = history.series.get(`angle:${ay}`) ?? [];
     const lab = (id: string) => ANGLE_BY_ID.get(id)?.label ?? id;
-    const series: Series[] = ax && ay ? [{ label: `${lab(ay)} against ${lab(ax)} (last ${HISTORY_SECONDS} s; the dot is now)`, x: sx, y: sy, color: PALETTE[0] }] : [];
-    drawChart($<HTMLCanvasElement>('live-chart'), series, { xLabel: `${lab(ax)} (deg)`, yLabel: `${lab(ay)} (deg)`, dots: [{ x: sx[sx.length - 1], y: sy[sy.length - 1], color: '#f8fafc' }] });
-    const legend = legendHtml(series);
-    if ($('live-legend').innerHTML !== legend) $('live-legend').innerHTML = legend;
-    return;
+    const series: KeyedSeries[] = ax && ay ? [{ label: `${lab(ay)} against ${lab(ax)} (last ${HISTORY_SECONDS} s; the dot is now)`, x: sx, y: sy, color: PALETTE[0] }] : [];
+    return { series, opts: { xLabel: `${lab(ax)} (deg)`, yLabel: `${lab(ay)} (deg)`, dots: [{ x: sx[sx.length - 1], y: sy[sy.length - 1], color: '#f8fafc' }] } };
   }
   if (mode === 'bar') {
-    const series: Series[] = [{ label: 'Bar vertical velocity', x, y: history.series.get('bar:vy') ?? [], color: '#a3e635' }];
-    drawChart($<HTMLCanvasElement>('live-chart'), series, { xRange: [-HISTORY_SECONDS, 0], xLabel: 'seconds before now', yLabel: `${unit()}/s` });
-    const legend = legendHtml(series);
-    if ($('live-legend').innerHTML !== legend) $('live-legend').innerHTML = legend;
-    return;
+    return { series: [{ key: 'bar', label: 'Bar vertical velocity', x, y: history.series.get('bar:vy') ?? [], color: BAR_COLOR }], opts: { xRange: [-HISTORY_SECONDS, 0], xLabel: 'seconds before now', yLabel: `${unit()}/s` } };
   }
   const ids = mode === 'speed' ? settings.points : settings.angles;
-  const series: Series[] = ids.map((id, i) => ({
+  const series: KeyedSeries[] = ids.map((id, i) => ({
+    key: `${mode === 'speed' ? 'point' : 'angle'}:${id}`,
     label: mode === 'speed' ? POINT_LABELS[id as PointId] : ANGLE_BY_ID.get(id)!.label,
     x, y: history.series.get(`${mode}:${id}`) ?? [], color: PALETTE[i % PALETTE.length],
   }));
   const yLabel = mode === 'angle' ? 'deg' : mode === 'vel' ? 'deg/s' : `${unit()}/s`;
-  drawChart($<HTMLCanvasElement>('live-chart'), series, { xRange: [-HISTORY_SECONDS, 0], xLabel: 'seconds before now', yLabel });
+  return { series, opts: { xRange: [-HISTORY_SECONDS, 0], xLabel: 'seconds before now', yLabel } };
+}
+
+function updateLiveChart(): void {
+  const { series, opts } = liveChartSpec();
+  $('live-aa').hidden = $<HTMLSelectElement>('live-chart-mode').value !== 'aa';
+  drawChart($<HTMLCanvasElement>('live-chart'), series, opts);
   const legend = legendHtml(series);
   if ($('live-legend').innerHTML !== legend) $('live-legend').innerHTML = legend;
+  if (fs.on && fs.chart) {
+    const shown = series.filter((x) => !x.key || !fs.hidden.has(x.key));
+    drawChart($<HTMLCanvasElement>('fs-chart'), shown, { ...opts, scale: Math.max(1.3, Math.min(2.4, window.innerHeight / 620)) });
+    const fsLegend = legendHtml(shown);
+    if ($('fs-legend').innerHTML !== fsLegend) $('fs-legend').innerHTML = fsLegend;
+  }
 }
 
 function updateCoach(s: LiveSample | null): void {
@@ -850,6 +864,7 @@ function updateDelayUi(): void {
   chk.disabled = on;
   chk.parentElement!.title = on ? 'Not available while the delayed view is on: the video would be out of step with the measurements.' : '';
   $('live-tag').textContent = on ? `delayed ${d} s` : 'live estimate';
+  renderFsBar();
   updateDelayState();
 }
 
@@ -887,6 +902,7 @@ function drawDelayChrome(label: string): void {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (label) badge(label, W / 2, 30 * k, 26 * k, '#fde047', 'center');
+  if (fs.on && !fs.inset) { ctx.restore(); return; }
   const iw = Math.round(W * (H > W ? 0.3 : 0.24)), ih = Math.round((iw * H) / W), x0 = Math.round(12 * k), y0 = H - ih - Math.round(12 * k);
   ctx.fillStyle = '#0b1220';
   ctx.fillRect(x0, y0, iw, ih);
@@ -951,6 +967,151 @@ function showDelayed(now: number): void {
     delay.busy = false;
     if (source === src && delayActive() && !rp && replay.entries.includes(entry)) draw(bmp);
   }, () => { delay.busy = false; });
+}
+
+// ---- Full screen -------------------------------------------------------------------------------
+
+type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
+type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+const nativeFsElement = () => document.fullscreenElement ?? (document as FsDoc).webkitFullscreenElement ?? null;
+/** The sample the picture is showing right now: a replay frame, the delayed frame, or the live one. */
+const viewSample = () => (rp ? rp.entries[rp.i].sample : delayActive() ? delay.shown : lastSample);
+const liveMode = () => PRESET_BY_ID.get(settings.preset)?.analysis.find((a) => a === 'bike' || a === 'run');
+
+/** The measurements that can be shown or hidden in full screen, in display order. */
+function fsMeasures(): { key: string; label: string }[] {
+  const mode = liveMode();
+  return [
+    ...(mode ? [{ key: 'cadence', label: mode === 'bike' ? 'Cadence' : 'Step rate' }] : []),
+    ...(isLift() ? [{ key: 'bar', label: 'Bar' }] : []),
+    ...settings.angles.map((id) => ({ key: `angle:${id}`, label: ANGLE_BY_ID.get(id)?.label ?? id })),
+    ...settings.points.map((id) => ({ key: `point:${id}`, label: POINT_LABELS[id] })),
+  ];
+}
+
+/** Rebuilds the row of show and hide buttons if anything in it changed, keeping keyboard focus where it was. */
+function renderFsBar(): void {
+  const bar = $('fs-bar');
+  const btn = (k: string, label: string, pressed: boolean) => `<button type="button" data-k="${esc(k)}" aria-pressed="${pressed}">${esc(label)}</button>`;
+  const mode = $<HTMLSelectElement>('live-chart-mode');
+  const html = `<div class="group"><span class="group-label">Show</span>${btn('panel:metrics', 'Measurements', fs.metrics)}${btn('panel:chart', 'Plot', fs.chart)}${btn('panel:inset', 'Live inset', fs.inset)}</div>`
+    + `<div class="group">${btn('delay', `Delayed view${settings.delayOn ? ` ${settings.delaySeconds} s` : ''}`, settings.delayOn)}`
+    + `<label>Plot of <select data-k="mode">${[...mode.options].map((o) => `<option value="${o.value}"${o.value === mode.value ? ' selected' : ''}>${esc(o.textContent ?? '')}</option>`).join('')}</select></label></div>`
+    + `<div class="group"><span class="group-label">Measurements</span>${fsMeasures().map((m) => btn(m.key, m.label, !fs.hidden.has(m.key))).join('') || '<span class="group-label">none selected</span>'}</div>`
+    + '<button type="button" data-k="exit" class="push">Exit full screen <kbd>Esc</kbd></button>';
+  if (html === fs.barHtml) return;
+  const focused = bar.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.k : undefined;
+  fs.barHtml = html;
+  bar.innerHTML = html;
+  if (focused) [...bar.querySelectorAll<HTMLElement>('[data-k]')].find((el) => el.dataset.k === focused)?.focus();
+}
+
+/** Large tiles for the chosen measurements, coloured to match their lines on the plot. */
+function updateFsTiles(s: LiveSample | null): void {
+  const u = unit(), d = u === 'm' ? 2 : 0, chartMode = $<HTMLSelectElement>('live-chart-mode').value;
+  const tile = (color: string, label: string, value: string, unitText: string, sub: string, missing = false) =>
+    `<div class="fs-tile${missing ? ' missing' : ''}"${color ? ` style="--c:${color}"` : ''}><div class="lab">${esc(label)}</div><div class="val">${esc(value)}${unitText ? ` <small>${esc(unitText)}</small>` : ''}</div><div class="sub">${esc(sub)}</div></div>`;
+  const tiles: string[] = [];
+  const mode = liveMode();
+  if (mode && !fs.hidden.has('cadence')) {
+    const c = rp ? NaN : liveCadence();
+    tiles.push(tile('', mode === 'bike' ? 'Cadence' : 'Step rate', Number.isFinite(c) ? (mode === 'bike' ? c : 2 * c).toFixed(0) : '\u2013', mode === 'bike' ? 'rev/min' : 'steps/min', `last ${HISTORY_SECONDS} s`, !Number.isFinite(c)));
+  }
+  if (isLift() && !fs.hidden.has('bar')) {
+    const b = s?.bar, color = chartMode === 'bar' ? BAR_COLOR : '';
+    tiles.push(b ? tile(color, 'Bar velocity', f(b.vy, d), `${u}/s`, `height ${f(b.y, d)} ${u}${liveRep ? `, last lift mean ${f(liveRep.meanVelocity, 2)} m/s` : ''}`) : tile(color, 'Bar velocity', '\u2013', '', 'not located', true));
+  }
+  settings.angles.forEach((id, i) => {
+    if (fs.hidden.has(`angle:${id}`)) return;
+    const a = s?.angles.get(id), label = ANGLE_BY_ID.get(id)?.label ?? id;
+    const color = chartMode === 'angle' || chartMode === 'vel' ? PALETTE[i % PALETTE.length] : '';
+    tiles.push(a && Number.isFinite(a.value) ? tile(color, label, `${f(a.value)}${DEG}`, '', `${f(a.velocity, 0)} ${DEG}/s`) : tile(color, label, '\u2013', '', 'not visible', true));
+  });
+  settings.points.forEach((id, i) => {
+    if (fs.hidden.has(`point:${id}`)) return;
+    const p = s?.points.get(id), color = chartMode === 'speed' ? PALETTE[i % PALETTE.length] : '';
+    tiles.push(p ? tile(color, POINT_LABELS[id], f(p.speed, d), `${u}/s`, `at (${f(p.x, d)}, ${f(p.y, d)}) ${u}`) : tile(color, POINT_LABELS[id], '\u2013', '', 'not visible', true));
+  });
+  const html = tiles.join('') || '<p class="fs-empty">No measurements are switched on. Move the mouse or tap to choose some.</p>';
+  if ($('fs-tiles').innerHTML !== html) $('fs-tiles').innerHTML = html;
+}
+
+/** Shows the button row, then lets it fade after a few seconds without input. */
+function fsWake(): void {
+  const root = $('fs-root');
+  root.classList.remove('idle');
+  clearTimeout(fs.idleTimer);
+  if (!fs.on) return;
+  fs.idleTimer = window.setTimeout(() => {
+    // Someone working the buttons from the keyboard keeps them on screen; a button last used by mouse or touch does not.
+    if ($('fs-bar').querySelector(':focus-visible')) { fsWake(); return; }
+    if ($('fs-bar').contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+    root.classList.add('idle');
+  }, 3500);
+}
+
+function layoutFs(): void {
+  $('fs-bar').hidden = !fs.on;
+  $('fs-strip').hidden = !fs.on || (!fs.metrics && !fs.chart);
+  $('fs-tiles').hidden = !fs.metrics;
+  $('fs-plot').hidden = !fs.chart;
+  if (!fs.on) return;
+  renderFsBar();
+  updateReadouts(viewSample());
+  updateLiveChart();
+}
+
+function applyFullscreen(on: boolean): void {
+  fs.on = on;
+  $('fs-root').classList.toggle('fs', on);
+  document.body.classList.toggle('fs-lock', on);
+  $('btn-fs').innerHTML = on ? 'Exit full screen <kbd>F</kbd>' : 'Full screen <kbd>F</kbd>';
+  layoutFs();
+  fsWake();
+  // Keep the screen awake while someone is watching from across the room (where the browser allows it).
+  const wl = (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock;
+  if (on) wl?.request('screen').then((lock) => { if (fs.on) fs.wakeLock = lock; else void lock.release(); }, () => undefined);
+  else { void fs.wakeLock?.release().catch(() => undefined); fs.wakeLock = null; }
+}
+
+async function setFullscreen(on: boolean): Promise<void> {
+  const root = $('fs-root') as FsEl, doc = document as FsDoc;
+  try {
+    if (on && !nativeFsElement()) await (root.requestFullscreen ? root.requestFullscreen() : root.webkitRequestFullscreen?.());
+    else if (!on && nativeFsElement()) await (doc.exitFullscreen ? doc.exitFullscreen() : doc.webkitExitFullscreen?.());
+  } catch { /* Not available (for example on iPhone): the view still fills the browser window. */ }
+  applyFullscreen(on);
+}
+
+function initFullscreen(): void {
+  $('btn-fs').addEventListener('click', () => void setFullscreen(!fs.on));
+  const bar = $('fs-bar');
+  bar.addEventListener('click', (ev) => {
+    const k = (ev.target as HTMLElement).closest<HTMLElement>('button[data-k]')?.dataset.k;
+    if (!k) return;
+    if (k === 'exit') { void setFullscreen(false); return; }
+    if (k === 'delay') { setDelay(!settings.delayOn); return; }
+    if (k === 'panel:metrics') fs.metrics = !fs.metrics;
+    else if (k === 'panel:chart') fs.chart = !fs.chart;
+    else if (k === 'panel:inset') fs.inset = !fs.inset;
+    else if (fs.hidden.has(k)) fs.hidden.delete(k); else fs.hidden.add(k);
+    layoutFs();
+  });
+  bar.addEventListener('change', (ev) => {
+    const sel = ev.target as HTMLSelectElement;
+    if (sel.dataset.k !== 'mode') return;
+    const main = $<HTMLSelectElement>('live-chart-mode');
+    main.value = sel.value;
+    main.dispatchEvent(new Event('change'));
+  });
+  $('live-chart-mode').addEventListener('change', () => { if (fs.on) layoutFs(); else renderFsBar(); });
+  // Leaving by the browser's own Esc or gesture must put the page back as well.
+  for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { if (fs.on && !nativeFsElement()) applyFullscreen(false); });
+  bar.addEventListener('focusin', () => fsWake());
+  for (const ev of ['pointermove', 'pointerdown', 'keydown']) document.addEventListener(ev, () => { if (fs.on) fsWake(); }, { passive: true });
+  window.addEventListener('resize', () => { if (fs.on) updateLiveChart(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && fs.on) applyFullscreen(true); });
+  renderFsBar();
 }
 
 // ---- Instant replay ----------------------------------------------------------------------------
@@ -1054,8 +1215,10 @@ function setPickMode(mode: typeof pickMode): void {
 }
 
 function onCanvasClick(ev: MouseEvent): void {
-  const r = canvas.getBoundingClientRect();
-  const p = { x: ((ev.clientX - r.left) / r.width) * canvas.width, y: ((ev.clientY - r.top) / r.height) * canvas.height };
+  // In full screen the picture is letterboxed inside the canvas element: map through the drawn area, not the element.
+  const r = canvas.getBoundingClientRect(), zoom = Math.min(r.width / canvas.width, r.height / canvas.height);
+  const p = { x: (ev.clientX - r.left - (r.width - canvas.width * zoom) / 2) / zoom, y: (ev.clientY - r.top - (r.height - canvas.height * zoom) / 2) / zoom };
+  if (p.x < 0 || p.y < 0 || p.x > canvas.width || p.y > canvas.height) return;
   if (!pickMode) {
     // Weight lifting mode: a tap on the plate starts following it.
     if (!isLift() || rp || !lastBg) return;
@@ -1407,6 +1570,7 @@ function init(): void {
     updateDelayUi();
   });
   updateDelayUi();
+  initFullscreen();
   $('btn-gallery-all').addEventListener('click', () => shots.forEach((s, i) => setTimeout(() => download(s.blob, s.name), i * 300)));
 
   $('camera').addEventListener('change', () => { if (source?.kind === 'camera') void startCamera(); });
@@ -1452,7 +1616,9 @@ function init(): void {
     else if ((e.key === 's' || e.key === 'S') && source) void screenshot(shotCaption());
     else if (e.key === 'd' || e.key === 'D') setDelay(!settings.delayOn);
     else if ((e.key === 'r' || e.key === 'R') && source) (rp ? exitReplay() : enterReplay());
+    else if (e.key === 'f' || e.key === 'F') void setFullscreen(!fs.on);
     else if (e.key === 'Escape' && pickMode) { setPickMode(null); say('Cancelled.'); }
+    else if (e.key === 'Escape' && fs.on) void setFullscreen(false);
   });
   $('live-chart-mode').addEventListener('change', updateLiveChart);
   document.addEventListener('visibilitychange', () => { if (document.hidden && recorder.recording) { say('Trial stopped because the page was hidden.'); void stopTrial(); } });
