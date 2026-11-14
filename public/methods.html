@@ -101,6 +101,45 @@
 </ul>
 <p>Neither mode can assess pain, diagnose injury, or tell you the right position or technique for an individual. Neither has been compared with a professional fitting or gait-analysis system.</p>
 
+<h2>Calibration from standing height (countdown)</h2>
+<p>The rough calibration compares the eye-to-heel distance in the picture with eye height, taken as 93.6 % of stature (Drillis &amp; Contini, 1966). A countdown gives the person time to walk to where they will move; when it ends, about 0.7 s of frames are collected and the scale is accepted only if the eyes and both heels are visible, the whole body is in the picture, the person is still, the knees and hips are straight and the trunk is upright. Otherwise it is refused with the reason. The origin is moved to the floor under the feet.</p>
+<p>Limits: the 93.6 % figure is a population average, the eye and heel keypoints are model estimates, and the scale holds only at the distance from the camera where the person stood. Expect an error of a few percent, which carries straight through to every length, velocity, force and power. An object of known length in the plane of motion is better; for barbell lifts the plate itself is the best reference.</p>
+
+<h2>Video files</h2>
+<p>A recorded video can be used instead of the camera. It never leaves the device. There are two ways to use it:</p>
+<ul>
+<li><strong>Play through:</strong> the file plays and is measured as it goes, like the live camera. If the pose model is slower than the playback, frames are skipped.</li>
+<li><strong>Analyse every frame:</strong> the app steps through the file one frame at a time, so no frame is skipped and the slower, more accurate pose model can be used. This is the mode to use for numbers.</li>
+</ul>
+<p>Timestamps are the file's own frame times where the browser reports them. The frame rate is measured from those times during a short play and can be corrected by hand. Stepping assumes a constant frame rate, so a variable-frame-rate recording may have frames repeated or missed. Slow-motion clips play back slower than real life: the slow-motion factor (for example 8 for 240 fps footage that plays at 30 fps) converts file time to real time, and velocities are wrong without it. Whether a file can be opened depends on the browser: H.264 MP4 and WebM are widely supported, and HEVC (.mov) clips from some phones are not.</p>
+
+<h2>Planes of motion and axes of rotation</h2>
+<p>The three cardinal planes and the axis at right angles to each can be drawn on the person: sagittal plane and mediolateral axis, frontal plane and anteroposterior axis, transverse plane and longitudinal axis. Textbooks differ on axis names; the alternatives are listed beside the picture.</p>
+<p>The direction the body faces comes from the pose model's estimated 3D landmarks. Depth is the model's least reliable output, so the heading is smoothed and is held exactly square-on when it is within about 10&deg; of a front or side view. In side views, front and back are decided from the feet and face in the picture, not from depth. By default the long axis is the true vertical and only the heading follows the body; a second option tilts the planes with the trunk for lying or inverted positions. The planes are projected onto the picture without perspective. A small guide figure shows all three planes from a fixed angle, marks the plane the camera is looking at, and shows where the camera is relative to the body.</p>
+<p>These are the textbook reference planes and axes described from the anatomical position. Real joint axes are oblique and move during motion.</p>
+
+<h2>Line of gravity, velocity vectors and joint moments</h2>
+<ul>
+<li><strong>Line of gravity and base of support.</strong> A vertical line from the estimated centre of mass, and the span of the feet that are on the ground. Only the direction the camera can see is shown, and "vertical" assumes a level camera. A line of gravity outside the base means the posture cannot be held still; moving bodies are routinely in that state.</li>
+<li><strong>Velocity vectors.</strong> Each arrow shows where the point would be 0.15 s later at its present velocity. Dashed arrows are the tangential velocity v = &omega;r of the far end of a segment relative to its near end. These are live, causally filtered estimates.</li>
+<li><strong>Moment of gravity about a joint.</strong> The body beyond the joint is treated as one mass at its own centre of mass (segment masses and centres from de Leva, 1996). Moment = weight &times; horizontal distance from the joint. It is a static estimate: it ignores acceleration, so it is valid for held or slow postures only. For the hip, knee and ankle it assumes both legs share the load equally, and it needs a side view. The moment arm is measured in the picture plane.</li>
+</ul>
+
+<h2>Weight lifting mode</h2>
+<p><strong>Finding the bar.</strong> The pose model does not recognise a barbell. The bar is located by following the weight plate, which appears as a circle in a side view. The app searches for circular edges (a gradient-voting Hough transform), then fits a circle to the rim to a fraction of a pixel. Only the outline is used, so a spinning plate does not disturb it. Because other round objects can be mistaken for a plate, the user confirms the plate with a tap. When the plate cannot be found in a frame, the bar is estimated from the wrists plus the last known offset, and that is marked on the picture and reported as a percentage of frames.</p>
+<p><strong>Calibration.</strong> A trial cannot start until the picture is calibrated and a load is entered. The plate diameter (450 mm for Olympic and bumper plates) is the preferred reference because the plate lies in the plane the bar moves in.</p>
+<p><strong>Calculations.</strong> Bar position is resampled, low-pass filtered without lag, and differentiated. With load mass m and g = 9.80665 m/s&sup2;:</p>
+<ul>
+<li>Vertical force on the bar F = m (g + a).</li>
+<li>Power delivered to the bar P = F v (plus the small horizontal term).</li>
+<li>Work W = the sum of P over the lifting phase, which equals m g &times; rise plus the change in kinetic energy.</li>
+<li>A lift runs from where the upward bar speed passes 3 % of its peak (at least 0.02 m/s) to where it falls below that again.</li>
+<li>Mean propulsive velocity is the mean over the part of the lift with bar acceleration above -g (Sanchez-Medina et al., 2010).</li>
+</ul>
+<p><strong>What the numbers describe.</strong> These are values for the bar, not for the lifter's body. With body mass entered, "system" work and power use the combined centre of mass of lifter and bar from the segmental model, which is less certain.</p>
+<p><strong>How far to trust them.</strong> Range, time, mean velocity, work and mean power are robust. Peak acceleration, peak force and peak power come from differentiating twice and depend on frame rate and filter cutoff. At 30 frames per second fast lifts (cleans, snatches) are under-sampled and peaks are underestimated; the app warns when this applies. Every value carries the percentage error of the calibration.</p>
+<p><strong>Validation status.</strong> The calculations are checked against synthetic lifts with known answers, and the plate tracker against synthetic images and a synthetic barbell scene. The mode has not yet been compared with a linear position transducer or force plate on real lifts, and the tracker has not been tested on real gym footage.</p>
+
 <h2>What published comparisons report</h2>
 <p>Based on articles retrieved from PubMed, studies comparing this family of models with marker-based motion capture report results that depend strongly on the joint, the task and the camera view:</p>
 <ul>
@@ -123,6 +162,7 @@
 <li>Ferrer-Roca, V., et al. (2012). Influence of saddle height on lower limb kinematics in well-trained cyclists. Journal of Strength and Conditioning Research, 26(11), 3025-3029.</li>
 <li>Heiderscheit, B. C., et al. (2011). Effects of step rate manipulation on joint mechanics during running. Medicine &amp; Science in Sports &amp; Exercise, 43(2), 296-302.</li>
 <li>Robinson, R. O., Herzog, W., &amp; Nigg, B. M. (1987). Use of force platform variables to quantify the effects of chiropractic manipulation on gait symmetry. Journal of Manipulative and Physiological Therapeutics, 10(4), 172-176.</li>
+<li>Sanchez-Medina, L., Perez, C. E., &amp; Gonzalez-Badillo, J. J. (2010). Importance of the propulsive phase in strength assessment. International Journal of Sports Medicine, 31(2), 123-129. <a href="https://doi.org/10.1055/s-0029-1242815">doi:10.1055/s-0029-1242815</a></li>
 <li>Souza, R. B. (2016). An evidence-based videotaped running biomechanics analysis. Physical Medicine and Rehabilitation Clinics of North America, 27(1), 217-236.</li>
 <li>Winter, D. A. (2009). Biomechanics and Motor Control of Human Movement (4th ed.). Wiley.</li>
 <li>Zeni, J. A., Richards, J. G., &amp; Higginson, J. S. (2008). Two simple methods for determining gait events during treadmill and overground walking using kinematic data. Gait &amp; Posture, 27(4), 710-714.</li>

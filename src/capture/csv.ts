@@ -69,7 +69,7 @@ export function sessionJson(trial: Trial): string {
     version: SESSION_VERSION,
     meta: trial.meta,
     marks: trial.marks,
-    frames: trial.frames.map((f) => ({ t: f.t, w: f.w, h: f.h, lm: pack(f.lm), world: pack(f.world) })),
+    frames: trial.frames.map((f) => ({ t: f.t, w: f.w, h: f.h, lm: pack(f.lm), world: pack(f.world), ...(f.bar ? { bar: f.bar } : {}) })),
   });
 }
 
@@ -83,6 +83,6 @@ export function parseSession(text: string): Trial {
   return {
     meta: d.meta,
     marks: Array.isArray(d.marks) ? d.marks : [],
-    frames: d.frames.map((f: any) => ({ t: f.t, w: f.w, h: f.h, lm: unpack(f.lm), world: unpack(f.world) })),
+    frames: d.frames.map((f: any) => ({ t: f.t, w: f.w, h: f.h, lm: unpack(f.lm), world: unpack(f.world), ...(f.bar ? { bar: f.bar } : {}) })),
   };
 }

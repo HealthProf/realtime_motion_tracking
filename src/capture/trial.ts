@@ -7,7 +7,7 @@ import type { BodyModel } from '../analysis/com';
 export interface TrialMeta {
   appVersion: string;
   startedAt: string;
-  source: 'camera' | 'synthetic';
+  source: 'camera' | 'synthetic' | 'video';
   cameraLabel: string;
   nominalFps: number;
   timestampSource: TimestampSource;
@@ -20,6 +20,18 @@ export interface TrialMeta {
   bodyModel: BodyModel;
   preset: string;
   notes: string;
+  /** Video files only: how many times slower than real life the footage plays (1 = normal speed). Times are already corrected. */
+  slowMotion?: number;
+  /** Weight lifting mode: what was typed in for this trial. */
+  lift?: LiftMeta;
+}
+
+export interface LiftMeta {
+  lift: string;
+  /** Total load on the bar including the bar, kg. */
+  loadKg: number;
+  /** Lifter body mass in kg, if given (enables the system centre-of-mass estimates). */
+  bodyMassKg?: number;
 }
 
 export interface Mark {
@@ -49,6 +61,7 @@ export function storeFrame(f: PoseFrame, t0: number): PoseFrame {
     h: f.h,
     lm: f.lm ? f.lm.map((p) => qlm(p, 1e-3)) : null,
     world: f.world ? f.world.map((p) => qlm(p, 1e-5)) : null,
+    ...(f.bar ? { bar: { x: q(f.bar.x, 1e-3), y: q(f.bar.y, 1e-3), r: q(f.bar.r, 1e-3), src: f.bar.src } } : {}),
   };
 }
 

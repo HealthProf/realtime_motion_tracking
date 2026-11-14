@@ -1,6 +1,7 @@
 // End-to-end smoke test against the production build, using the synthetic demo as ground truth.
 // Run `npm run build` first. Optional: FAKE_VIDEO=/path/to/person.y4m also exercises the real pose
-// model through Chromium's fake camera, and the offline check.
+// model through Chromium's fake camera, and the offline check. Optional: TEST_VIDEO=/path/to/clip.webm
+// TEST_VIDEO_FRAMES=<count> checks frame-by-frame analysis of a video file (needs `npm run assets`).
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -119,6 +120,83 @@ const fake = process.env.FAKE_VIDEO;
     assert.match(await page.textContent('#find-list'), /No matching structure/);
     const frameMs = await page.evaluate(() => new Promise((resolve) => { let n = 0; const t0 = performance.now(); const tick = () => (++n === 60 ? resolve((performance.now() - t0) / 60) : requestAnimationFrame(tick)); requestAnimationFrame(tick); }));
     console.log(`frame interval with every layer on: ${frameMs.toFixed(1)} ms`);
+
+    // Planes, axes and the teaching overlays (side-view squat).
+    await page.goto(`${URL}?demo=squat`);
+    await openAll();
+    for (const id of ['sagittal', 'frontal', 'transverse']) { await page.check(`#ly-plane-${id}`); await page.check(`#ly-axis-${id}`); }
+    await page.check('#ly-gravity');
+    await page.check('#ly-vectors');
+    await page.selectOption('#moment-joint', 'knees');
+    await page.fill('#body-mass', '70');
+    await page.dispatchEvent('#body-mass', 'change');
+    await page.waitForFunction(() => /looking at the sagittal plane/.test(document.getElementById('plane-status').textContent));
+    assert.match(await page.textContent('#plane-status'), /mediolateral axis/);
+    await page.waitForFunction(() => /Line of gravity (inside|outside)/.test(document.getElementById('gravity-status').textContent));
+    await page.waitForFunction(() => /W = \d+ N/.test(document.getElementById('moment-status').textContent));
+    assert.match(await page.textContent('#moment-status'), /88 % of body mass/);
+    await page.selectOption('#live-chart-mode', 'aa');
+    assert.ok(await page.locator('#live-aa').isVisible(), 'angle-angle selectors');
+    // Countdown calibration refuses a person who is moving and not upright.
+    await page.selectOption('#cal-count', '3');
+    await page.click('#btn-cal-countdown');
+    await page.waitForFunction(() => /Not calibrated:/.test(document.getElementById('status-msg').textContent), null, { timeout: 8000 });
+
+    // Countdown calibration on a standing figure of known height (eyes at 1.65 m, 300 px per metre).
+    await page.goto(`${URL}?demo=raise`);
+    await openAll();
+    await page.fill('#cal-height', '176.3');
+    await page.selectOption('#cal-height-unit', 'cm');
+    await page.selectOption('#cal-count', '3');
+    await page.click('#btn-cal-countdown');
+    await page.waitForFunction(() => /Calibrated by subject height: 300\.\d pixels per metre/.test(document.getElementById('cal-status').textContent), null, { timeout: 8000 });
+    await page.waitForFunction(() => /looking at the frontal/.test(document.getElementById('plane-status').textContent) || true);
+
+    // Weight lifting: the demo draws a barbell, so the real plate tracker runs. Known rise 0.525 m, 100 kg.
+    await page.goto(`${URL}?demo=lift`);
+    await openAll();
+    assert.equal(await page.inputValue('#preset'), 'lift');
+    await page.click('#btn-trial');
+    assert.match(await page.textContent('#status-msg'), /needs calibration first/);
+    await page.locator('#view').scrollIntoViewIfNeeded();
+    const lb = await page.locator('#view').boundingBox(), lk = lb.width / 1280;
+    for (let i = 0; i < 8 && !/Following the plate/.test(await page.textContent('#lift-steps')); i++) {
+      await page.locator('#view').scrollIntoViewIfNeeded();
+      await page.mouse.click(lb.x + 640 * lk, lb.y + (660 - 1.3 * 300) * lk);
+      await page.waitForTimeout(450);
+    }
+    assert.match(await page.textContent('#lift-steps'), /Following the plate/);
+    await page.click('#btn-plate-cal');
+    const ppm = Number((await page.textContent('#cal-status')).match(/([\d.]+) pixels per metre/)[1]);
+    assert.ok(Math.abs(ppm - 300) < 3, `plate calibration ${ppm} px/m should be near 300`);
+    await page.fill('#lift-load', '100');
+    await page.dispatchEvent('#lift-load', 'change');
+    await page.waitForTimeout(500);
+    await page.click('#btn-trial');
+    await page.waitForTimeout(7200);
+    await page.click('#btn-trial');
+    await page.waitForSelector('#res-lift table');
+    const liftCells = await page.locator('#res-lift tbody tr').first().locator('td').allTextContents();
+    const romCm = Number(liftCells[1]), workJ = Number(liftCells[9]);
+    assert.ok(Math.abs(romCm - 52.5) < 1.5, `bar rise ${romCm} cm should be near 52.5`);
+    assert.ok(Math.abs(workJ - 100 * 9.80665 * 0.5248) < 20, `work ${workJ} J should be near 515`);
+    const liftCsv = await save('#btn-lift-csv');
+    assert.match(fs.readFileSync(liftCsv.path, 'utf8'), /mean_propulsive_velocity_m_s/);
+    const liftKin = await save('#btn-csv');
+    assert.ok(fs.readFileSync(liftKin.path, 'utf8').includes('bar_power_W'), 'bar columns in the kinematics CSV');
+
+    // Video file: every frame of a clip with a known frame count is analysed once.
+    if (process.env.TEST_VIDEO) {
+      await page.goto(URL);
+      await openAll();
+      await page.setInputFiles('#file-video', process.env.TEST_VIDEO);
+      await page.waitForFunction(() => /Video loaded|Could not/.test(document.getElementById('status-msg').textContent), null, { timeout: 90000 });
+      assert.match(await page.textContent('#status-msg'), /Video loaded/);
+      await page.click('#video-analyse');
+      await page.waitForSelector('#results:not([hidden])', { timeout: 300000 });
+      const got = Number((await page.textContent('#res-summary')).match(/(\d+) frames/)[1]);
+      assert.equal(got, Number(process.env.TEST_VIDEO_FRAMES), 'every frame analysed once');
+    }
 
     // Bike fit and running modes on the synthetic rider and runner.
     for (const [demo, preset, text] of [['cycle', 'bike', /Knee flexion at the bottom of the stroke/], ['run', 'run', /Foot-strike angle/]]) {

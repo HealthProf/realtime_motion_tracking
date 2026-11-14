@@ -3,7 +3,7 @@
 import type { Lm, PoseFrame } from '../types';
 import { L, LANDMARK_NAMES, type LandmarkName } from './landmarks';
 
-export type SyntheticActivity = 'squat' | 'jump' | 'raise' | 'cycle' | 'run';
+export type SyntheticActivity = 'squat' | 'jump' | 'raise' | 'cycle' | 'run' | 'lift';
 
 export const SYNTH = {
   width: 1280,
@@ -25,6 +25,10 @@ export const SYNTH = {
   runStride: 0.7,
   runContact: 0.25,
   runStrikeAngle: 12,
+  /** Barbell squat: period (s), plate radius (m: a standard 450 mm plate) and the bar's offset from the shoulder (m). */
+  liftPeriod: 3,
+  plateRadius: 0.225,
+  barOffset: { x: -0.05, y: 0.03 },
 } as const;
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -197,8 +201,27 @@ function runner(t: number): Partial<Record<LandmarkName, P>> {
   return assemble({ l: runLeg(t, hip), r: runLeg(t + SYNTH.runStride / 2, hip) }, { l: arm(1), r: arm(-1) }, add(shoulder, 0.2, 8));
 }
 
+function lifter(t: number): Partial<Record<LandmarkName, P>> {
+  const s = 0.5 * (1 - Math.cos((2 * Math.PI * t) / SYNTH.liftPeriod));
+  const b = sagittal(5 + 25 * s, 5 + 75 * s, 5 + 35 * s, 0, 0, 0);
+  // Back squat: the hands hold the bar beside the shoulders.
+  for (const side of ['l', 'r'] as const) {
+    const sh = b[`${side}_shoulder`]!;
+    b[`${side}_elbow`] = { x: sh.x - 0.1, y: sh.y - 0.24 };
+    for (const n of ['wrist', 'index', 'pinky', 'thumb'] as const) b[`${side}_${n}`] = { x: sh.x + SYNTH.barOffset.x + 0.04, y: sh.y + SYNTH.barOffset.y - 0.03 };
+  }
+  return b;
+}
+
+/** Centre of the synthetic barbell (metres, x right, y up) at time t. Ground truth for the lifting tests. */
+export function syntheticBar(t: number): P {
+  const sh = lifter(t).l_shoulder!;
+  return { x: sh.x + SYNTH.barOffset.x, y: sh.y + SYNTH.barOffset.y };
+}
+
 /** Body configuration in metres (x right, y up, origin at the ground under the subject). */
 export function syntheticBody(t: number, activity: SyntheticActivity): Partial<Record<LandmarkName, P>> {
+  if (activity === 'lift') return lifter(t);
   if (activity === 'raise') {
     const s = 0.5 * (1 - Math.cos((2 * Math.PI * t) / SYNTH.raisePeriod));
     return frontal(10 + (SYNTH.raiseMaxLeft - 10) * s, 10 + (SYNTH.raiseMaxRight - 10) * s);

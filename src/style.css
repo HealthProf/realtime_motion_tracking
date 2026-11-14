@@ -67,9 +67,9 @@ label.block { margin-top: 0.6rem; }
 label.grow { flex: 1 1 10rem; }
 .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
 .row > label { flex: 0 1 auto; }
-.transport, #replay-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-#replay-bar { background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 0.5rem; }
-#replay-bar label { display: flex; align-items: center; gap: 0.4rem; }
+.transport, #replay-bar, #video-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+#replay-bar, #video-bar { background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 0.5rem; }
+#replay-bar label, #video-bar label { display: flex; align-items: center; gap: 0.4rem; }
 .clock { font-variant-numeric: tabular-nums; font-weight: 650; }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; min-width: 0; }
@@ -140,3 +140,13 @@ input[type='text'] { font: inherit; color: var(--text); background: var(--surfac
 .options small { display: block; }
 .caveats { font-size: 0.85rem; padding-left: 1.2rem; }
 td.wrap, th.wrap { white-space: normal; min-width: 12rem; text-align: left; }
+
+#start-panel input[type='file'] { max-width: 100%; }
+.steps { margin: 0; padding-left: 1.3rem; display: grid; gap: 0.25rem; font-size: 0.9rem; }
+.steps li.done { color: var(--ok); }
+.steps li.todo { color: var(--warn); }
+#plane-status table, #moment-status table { font-size: 0.82rem; }
+#plane-status td, #plane-status th { white-space: normal; text-align: left; vertical-align: top; }
+#plane-status .sw { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 2px; background: var(--c); margin-right: 0.3rem; }
+fieldset#plane-list, fieldset#axis-list { grid-template-columns: minmax(0, 1fr); }
+.lift-big { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }

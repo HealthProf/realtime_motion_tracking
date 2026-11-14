@@ -32,8 +32,11 @@ export const H = (up: number, left: number, ant: number): PtFn => tag((r, side) 
 /** Limb point: fraction along the segment, offset in front/back views (+ lateral), offset in side views (+ anterior). */
 export const A = (seg: SegName, s: number, offFrontal: number, offLateral: number): PtFn => tag((r, side) => r.at([seg, s, r.info.view === 'lateral' ? offLateral : offFrontal], side), seg);
 
+/** Characteristic organ outlines. Without one, a structure is drawn as a shaded ellipse. */
+export type FormId = 'lung' | 'heart' | 'liver' | 'stomach' | 'bean' | 'brain' | 'pancreas' | 'coils';
+
 type Shape =
-  | { kind: 'ellipse'; c: PtFn; rx: number; ry: number; rz: number }
+  | { kind: 'ellipse'; c: PtFn; rx: number; ry: number; rz: number; form?: FormId }
   | { kind: 'path'; pts: PtFn[]; width: number; lateralPts?: PtFn[] }
   | { kind: 'dots'; pts: PtFn[]; r: number };
 
@@ -48,7 +51,7 @@ export interface SystemStructure {
   shapes: Shape[];
 }
 
-const E = (c: PtFn, rx: number, ry: number, rz = rx): Shape => ({ kind: 'ellipse', c, rx, ry, rz });
+const E = (c: PtFn, rx: number, ry: number, rz = rx, form?: FormId): Shape => ({ kind: 'ellipse', c, rx, ry, rz, form });
 const Pth = (width: number, ...pts: PtFn[]): Shape => ({ kind: 'path', pts, width });
 const D = (r: number, ...pts: PtFn[]): Shape => ({ kind: 'dots', pts, r });
 const def = (system: SystemId, id: string, name: string, aliases: string[], bilateral: boolean, shapes: Shape[], extra: Partial<SystemStructure> = {}): SystemStructure => ({ id, name, aliases, system, bilateral, shapes, ...extra });
@@ -57,18 +60,18 @@ const FRONTAL: AnatomyView[] = ['anterior', 'posterior'];
 
 export const STRUCTURES: SystemStructure[] = [
   // ---- Organs (drawn back to front) ----
-  def('organs', 'brain', 'Brain', ['cerebrum', 'cerebellum'], false, [E(H(0.3, 0, -0.05), 0.82, 0.68, 0.9)], { color: '#f9a8d4' }),
-  def('organs', 'kidneys', 'Kidneys', ['kidney', 'renal'], true, [E(T(0.68, 0.1, -0.1), 0.04, 0.07, 0.04)], { color: '#9f1239' }),
+  def('organs', 'brain', 'Brain', ['cerebrum', 'cerebellum'], false, [E(H(0.3, 0, -0.05), 0.82, 0.68, 0.9, 'brain')], { color: '#f9a8d4' }),
+  def('organs', 'kidneys', 'Kidneys', ['kidney', 'renal'], true, [E(T(0.68, 0.1, -0.1), 0.04, 0.07, 0.04, 'bean')], { color: '#9f1239' }),
   def('organs', 'trachea', 'Trachea', ['windpipe', 'airway'], false, [Pth(0.035, M(-0.14, 0, 0.04), M(0.14, 0, 0.03))], { color: '#bae6fd' }),
-  def('organs', 'lungs', 'Lungs', ['lung', 'pulmonary'], true, [E(T(0.27, 0.13, 0), 0.1, 0.19, 0.13)], { color: '#f9a8d4' }),
-  def('organs', 'heart', 'Heart', ['cardiac', 'myocardium'], false, [E(M(0.3, 0.04, 0.08), 0.085, 0.095, 0.08)], { color: '#b91c1c' }),
+  def('organs', 'lungs', 'Lungs', ['lung', 'pulmonary'], true, [E(T(0.27, 0.13, 0), 0.1, 0.2, 0.13, 'lung')], { color: '#f9a8d4' }),
+  def('organs', 'heart', 'Heart', ['cardiac', 'myocardium'], false, [E(M(0.3, 0.04, 0.08), 0.085, 0.095, 0.08, 'heart')], { color: '#b91c1c' }),
   def('organs', 'diaphragm', 'Diaphragm', [], false, [{ kind: 'path', width: 0.02, pts: [M(0.52, -0.26, 0), M(0.45, -0.1, 0), M(0.47, 0, 0), M(0.45, 0.1, 0), M(0.52, 0.26, 0)], lateralPts: [M(0.54, 0, -0.14), M(0.45, 0, 0), M(0.5, 0, 0.16)] }], { color: '#fb923c' }),
-  def('organs', 'pancreas', 'Pancreas', [], false, [E(M(0.64, 0.03, -0.02), 0.1, 0.025, 0.03)], { color: '#fcd34d' }),
-  def('organs', 'spleen', 'Spleen', [], false, [E(M(0.58, 0.23, -0.06), 0.035, 0.06, 0.05)], { color: '#7e22ce' }),
-  def('organs', 'liver', 'Liver', ['hepatic'], false, [E(M(0.56, -0.1, 0.05), 0.16, 0.08, 0.12)], { color: '#7c2d12' }),
-  def('organs', 'stomach', 'Stomach', ['gastric'], false, [E(M(0.6, 0.12, 0.06), 0.09, 0.07, 0.08)], { color: '#fda4af' }),
+  def('organs', 'pancreas', 'Pancreas', [], false, [E(M(0.64, 0.03, -0.02), 0.1, 0.025, 0.03, 'pancreas')], { color: '#fcd34d' }),
+  def('organs', 'spleen', 'Spleen', [], false, [E(M(0.58, 0.23, -0.06), 0.035, 0.06, 0.05, 'bean')], { color: '#7e22ce' }),
+  def('organs', 'liver', 'Liver', ['hepatic'], false, [E(M(0.56, -0.1, 0.05), 0.16, 0.08, 0.12, 'liver')], { color: '#7c2d12' }),
+  def('organs', 'stomach', 'Stomach', ['gastric'], false, [E(M(0.6, 0.12, 0.06), 0.09, 0.075, 0.08, 'stomach')], { color: '#fda4af' }),
   def('organs', 'large_intestine', 'Large intestine', ['colon', 'bowel'], false, [Pth(0.055, M(0.92, -0.2, 0.05), M(0.7, -0.21, 0.05), M(0.66, 0, 0.08), M(0.7, 0.21, 0.05), M(0.92, 0.2, 0.03), M(1.0, 0.02, -0.03))], { color: '#d6a56f' }),
-  def('organs', 'small_intestine', 'Small intestine', ['ileum', 'jejunum', 'duodenum', 'bowel'], false, [E(M(0.82, 0, 0.07), 0.13, 0.09, 0.08)], { color: '#fbbf7c' }),
+  def('organs', 'small_intestine', 'Small intestine', ['ileum', 'jejunum', 'duodenum', 'bowel'], false, [E(M(0.82, 0, 0.07), 0.13, 0.09, 0.08, 'coils')], { color: '#fbbf7c' }),
   def('organs', 'bladder', 'Urinary bladder', ['bladder'], false, [E(M(1.0, 0, 0.08), 0.05, 0.04, 0.04)], { color: '#fde68a' }),
 
   // ---- Arteries (each path runs away from the heart) ----
@@ -178,6 +181,71 @@ export function anchorOf(st: SystemStructure, rig: Rig, side: 'l' | 'r'): P {
   return { x: (mid.x + mid2.x) / 2, y: (mid.y + mid2.y) / 2 };
 }
 
+type Cmd = (string | number)[];
+/**
+ * Organ outlines in unit coordinates, scaled to the structure's half-widths. +x points toward the
+ * subject's left in front and back views (so shapes are drawn as seen) and toward the front in side
+ * views; +y points down the trunk. Commands: M x y | L x y | Q cx cy x y | C c1 c2 end | Z.
+ */
+const FORMS: Record<Exclude<FormId, 'coils'>, (o: { side: 'l' | 'r'; lateral: boolean }) => { outline: Cmd; lines: Cmd[] }> = {
+  // Drawn for the left lung (medial border at -x): the cardiac notch is on the left only, and the
+  // right lung has the extra horizontal fissure. The right lung is mirrored by the caller.
+  lung: ({ side, lateral }) => ({
+    outline: ['M', -0.35, -1, 'C', 0.5, -1, 0.95, -0.3, 1, 0.55, 'Q', 1, 0.95, 0.75, 1, 'Q', 0.1, 0.68, -0.55, 0.92, 'L', -0.72, 0.75,
+      ...(side === 'l' && !lateral ? ['Q', -0.2, 0.62, -0.25, 0.22, 'Q', -0.3, -0.1, -0.74, -0.2] : ['L', -0.78, -0.2]), 'C', -0.82, -0.6, -0.7, -0.95, -0.35, -1, 'Z'],
+    lines: [['M', -0.55, -0.35, 'Q', 0.3, 0.05, 0.86, 0.72], ...(side === 'r' || lateral ? [['M', -0.6, 0.02, 'Q', 0, -0.02, 0.55, -0.1] as Cmd] : [])],
+  }),
+  heart: () => ({
+    outline: ['M', -0.3, -0.75, 'C', 0.2, -1, 0.95, -0.6, 0.95, 0.05, 'C', 0.95, 0.5, 0.85, 0.8, 0.7, 0.95, 'C', 0.2, 0.85, -0.6, 0.75, -0.85, 0.3, 'C', -1, -0.1, -0.8, -0.6, -0.3, -0.75, 'Z'],
+    lines: [['M', -0.55, -0.35, 'Q', 0.15, -0.1, 0.55, 0.75], ['M', -0.85, 0.05, 'Q', 0, -0.05, 0.92, -0.25]],
+  }),
+  liver: () => ({
+    outline: ['M', -1, -0.3, 'C', -0.9, -1, 0.3, -1, 1, -0.55, 'Q', 0.9, -0.1, 0.4, 0.2, 'Q', -0.3, 0.6, -0.8, 1, 'Q', -1.05, 0.6, -1, -0.3, 'Z'],
+    lines: [['M', 0.25, -0.85, 'Q', 0.12, -0.3, 0.2, 0.28]],
+  }),
+  stomach: () => ({
+    outline: ['M', -0.1, -0.95, 'C', 0.3, -1.1, 1, -0.8, 0.95, 0, 'C', 0.9, 0.7, 0.2, 1, -0.5, 0.8, 'Q', -0.95, 0.7, -0.95, 0.4, 'Q', -0.6, 0.55, -0.2, 0.35, 'C', 0.2, 0.1, 0, -0.4, -0.1, -0.95, 'Z'],
+    lines: [['M', 0.1, -0.7, 'Q', 0.55, -0.2, 0.4, 0.45], ['M', 0.5, -0.75, 'Q', 0.85, -0.2, 0.6, 0.6]],
+  }),
+  bean: () => ({
+    outline: ['M', 0, -1, 'C', 0.9, -1, 1, 1, 0, 1, 'C', -0.6, 1, -0.75, 0.5, -0.35, 0.2, 'Q', -0.15, 0, -0.35, -0.2, 'C', -0.75, -0.5, -0.6, -1, 0, -1, 'Z'],
+    lines: [],
+  }),
+  pancreas: () => ({
+    outline: ['M', -1, -0.4, 'Q', -1.1, 0.7, -0.7, 0.95, 'Q', 0, 0.35, 1, -0.2, 'Q', 1.06, -0.7, 0.8, -0.7, 'Q', 0, -0.3, -0.5, -0.9, 'Q', -0.9, -1, -1, -0.4, 'Z'],
+    lines: [],
+  }),
+  brain: ({ lateral }) => lateral ? {
+    outline: ['M', -0.95, 0.1, 'C', -1.05, -0.9, 0.3, -1.2, 0.9, -0.45, 'C', 1.1, -0.1, 0.9, 0.3, 0.5, 0.3, 'Q', 0.2, 0.62, -0.15, 0.42, 'Q', -0.6, 0.5, -0.95, 0.1, 'Z'],
+    lines: [['M', 0.05, -0.95, 'Q', -0.1, -0.4, 0.1, 0.05], ['M', -0.5, -0.9, 'Q', -0.35, -0.5, -0.6, -0.1], ['M', 0.45, -0.75, 'Q', 0.4, -0.35, 0.6, -0.05], ['M', 0.55, 0.2, 'Q', 0.1, 0.0, -0.45, 0.1], ['M', -0.85, -0.35, 'Q', -0.6, -0.3, -0.75, 0.05]],
+  } : {
+    outline: ['M', 0, -0.92, 'C', 0.5, -1.15, 1, -0.5, 0.98, 0.1, 'C', 0.95, 0.75, 0.4, 1, 0, 0.85, 'C', -0.4, 1, -0.95, 0.75, -0.98, 0.1, 'C', -1, -0.5, -0.5, -1.15, 0, -0.92, 'Z'],
+    lines: [['M', 0, -0.92, 'L', 0, 0.85], ['M', 0.2, -0.8, 'Q', 0.5, -0.4, 0.25, -0.1, 'Q', 0.55, 0.2, 0.3, 0.6], ['M', 0.6, -0.65, 'Q', 0.85, -0.2, 0.65, 0.15, 'Q', 0.85, 0.4, 0.6, 0.7],
+      ['M', -0.2, -0.8, 'Q', -0.5, -0.4, -0.25, -0.1, 'Q', -0.55, 0.2, -0.3, 0.6], ['M', -0.6, -0.65, 'Q', -0.85, -0.2, -0.65, 0.15, 'Q', -0.85, 0.4, -0.6, 0.7]],
+  },
+};
+
+/** Lightens (f > 0) or darkens (f < 0) a #rrggbb colour. */
+function tint(hex: string, f: number): string {
+  const n = parseInt(hex.slice(1), 16), ch = (v: number) => Math.round(f >= 0 ? v + (255 - v) * f : v * (1 + f));
+  return `rgb(${ch((n >> 16) & 255)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
+
+/** Builds a path from unit-space commands under the affine map (u, v) -> c + u * ex + v * ey. */
+function mapped(cmd: Cmd, c: P, ex: P, ey: P): Path2D {
+  const q = new Path2D();
+  const X = (u: number, v: number) => c.x + u * ex.x + v * ey.x, Y = (u: number, v: number) => c.y + u * ex.y + v * ey.y;
+  for (let i = 0; i < cmd.length;) {
+    const k = cmd[i++] as string, n = (j: number) => cmd[i + j] as number;
+    if (k === 'M') { q.moveTo(X(n(0), n(1)), Y(n(0), n(1))); i += 2; }
+    else if (k === 'L') { q.lineTo(X(n(0), n(1)), Y(n(0), n(1))); i += 2; }
+    else if (k === 'Q') { q.quadraticCurveTo(X(n(0), n(1)), Y(n(0), n(1)), X(n(2), n(3)), Y(n(2), n(3))); i += 4; }
+    else if (k === 'C') { q.bezierCurveTo(X(n(0), n(1)), Y(n(0), n(1)), X(n(2), n(3)), Y(n(2), n(3)), X(n(4), n(5)), Y(n(4), n(5))); i += 6; }
+    else q.closePath();
+  }
+  return q;
+}
+
 function smoothPath(ctx: CanvasRenderingContext2D, pts: P[]): void {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
@@ -211,13 +279,59 @@ export function drawStructure(ctx: CanvasRenderingContext2D, st: SystemStructure
     for (const sh of st.shapes) {
       if (sh.kind === 'ellipse') {
         const c = sh.c(rig, side), unit = sh.c.region === 'head' ? rig.headRadius : S;
-        ctx.fillStyle = color;
-        ctx.strokeStyle = 'rgba(15,23,42,0.75)';
-        ctx.lineWidth = Math.max(1, S * 0.006);
-        ctx.beginPath();
-        ctx.ellipse(c.x, c.y, Math.max(1, (lateral ? sh.rz : sh.rx) * unit), Math.max(1, sh.ry * unit), rot, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        const rx = Math.max(1, (lateral ? sh.rz : sh.rx) * unit), ry = Math.max(1, sh.ry * unit), big = Math.max(rx, ry);
+        // Rounded shading: lit from the upper left.
+        const g = ctx.createRadialGradient(c.x - big * 0.3, c.y - big * 0.35, big * 0.05, c.x, c.y, big * 1.1);
+        g.addColorStop(0, tint(color, 0.45)); g.addColorStop(0.5, color); g.addColorStop(1, tint(color, -0.4));
+        ctx.fillStyle = g;
+        ctx.strokeStyle = 'rgba(15,23,42,0.8)';
+        ctx.lineWidth = Math.max(1, S * 0.007);
+        const inTrunkOrHead = sh.c.region === 'trunk' || sh.c.region === 'head';
+        if (sh.form && inTrunkOrHead) {
+          // Local axes: +x toward the subject's left (front/back views) or the front (side view); +y down the trunk.
+          const at = (l: number, a: number) => (sh.c.region === 'head' ? rig.head(0, l, a) : rig.trunk(0.5, l, a));
+          const o = at(0, 0), e = at(1, 1), d = Math.hypot(e.x - o.x, e.y - o.y) || 1;
+          const mirror = !lateral && side === 'r' && st.bilateral ? -1 : 1;
+          const ex = { x: ((e.x - o.x) / d) * rx * mirror, y: ((e.y - o.y) / d) * rx * mirror }, ey = { x: trunkAxis.x * ry, y: trunkAxis.y * ry };
+          if (sh.form === 'coils') {
+            // Small intestine: one tube folded back and forth inside the region.
+            const cmd: Cmd = ['M', -0.55, -0.8];
+            const rows = [-0.8, -0.48, -0.16, 0.16, 0.48, 0.8];
+            rows.forEach((v, i) => {
+              const half = 0.95 * Math.sqrt(Math.max(0.1, 1 - v * v * 0.8)), dir = i % 2 ? -1 : 1, next = rows[i + 1];
+              cmd.push('L', dir * half * 0.7, v);
+              if (next !== undefined) cmd.push('C', dir * half * 1.25, v, dir * half * 1.25, next, dir * half * 0.7, next);
+            });
+            const tube = mapped(cmd, c, ex, ey), w = Math.max(2, ry * 0.26);
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.lineWidth = w + Math.max(1.5, S * 0.008); ctx.stroke(tube);
+            ctx.strokeStyle = color; ctx.lineWidth = w; ctx.stroke(tube);
+            ctx.strokeStyle = tint(color, 0.5); ctx.lineWidth = w * 0.3; ctx.stroke(tube);
+          } else {
+            const f = FORMS[sh.form]({ side, lateral });
+            const outline = mapped(f.outline, c, ex, ey);
+            ctx.fill(outline);
+            ctx.stroke(outline);
+            ctx.strokeStyle = tint(color, -0.5);
+            ctx.lineWidth = Math.max(0.8, S * 0.005);
+            for (const l of f.lines) ctx.stroke(mapped(l, c, ex, ey));
+            if (sh.form === 'brain' && lateral) {
+              // Cerebellum and brainstem, below and behind the cerebrum.
+              const cb = new Path2D();
+              cb.ellipse(c.x - ex.x * 0.55 + ey.x * 0.62, c.y - ex.y * 0.55 + ey.y * 0.62, rx * 0.4, ry * 0.3, rot, 0, Math.PI * 2);
+              ctx.fillStyle = tint(color, -0.15); ctx.strokeStyle = 'rgba(15,23,42,0.8)'; ctx.lineWidth = Math.max(1, S * 0.007);
+              ctx.fill(cb); ctx.stroke(cb);
+              const stem = mapped(['M', -0.12, 0.4, 'Q', -0.2, 0.75, -0.3, 1.1], c, ex, ey);
+              ctx.lineCap = 'round'; ctx.lineWidth = rx * 0.2 + 2; ctx.stroke(stem);
+              ctx.strokeStyle = tint(color, 0.1); ctx.lineWidth = rx * 0.2; ctx.stroke(stem);
+            }
+          }
+        } else {
+          ctx.beginPath();
+          ctx.ellipse(c.x, c.y, rx, ry, rot, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
       } else if (sh.kind === 'path') {
         const pts = shapePts(sh, lateral).map((f) => f(rig, side));
         const w = Math.max(1.5, sh.width * S);
@@ -228,6 +342,21 @@ export function drawStructure(ctx: CanvasRenderingContext2D, st: SystemStructure
         ctx.stroke();
         ctx.strokeStyle = color;
         ctx.lineWidth = w;
+        smoothPath(ctx, pts);
+        ctx.stroke();
+        if (st.system === 'organs' && (st.id === 'large_intestine' || st.id === 'trachea')) {
+          // Haustra of the colon and the cartilage rings of the trachea: regular bands across the tube.
+          ctx.lineCap = 'butt';
+          ctx.strokeStyle = tint(color, -0.45);
+          ctx.setLineDash([Math.max(1, w * 0.12), Math.max(3, w * (st.id === 'trachea' ? 0.45 : 0.85))]);
+          smoothPath(ctx, pts);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.lineCap = 'round';
+        }
+        // A highlight along the middle makes vessels, nerves and tubes read as round.
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = Math.max(0.6, w * 0.3);
         smoothPath(ctx, pts);
         ctx.stroke();
         if (o.time !== null && (st.system === 'arteries' || st.system === 'veins')) {

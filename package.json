@@ -2,7 +2,7 @@
   "name": "realtime-motion-tracking",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "assets": "node scripts/fetch-assets.mjs",

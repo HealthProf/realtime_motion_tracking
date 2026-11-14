@@ -33,6 +33,19 @@ export const settings = {
   inseamCm: NaN,
   saddleCm: NaN,
   speedKmh: NaN,
+  /** Planes follow the body's heading only, or tilt with the trunk. */
+  frameMode: 'heading' as 'heading' | 'trunk',
+  /** Body mass (kg) for joint moments and system power; NaN until typed in. */
+  bodyMassKg: NaN,
+  /** Load held in the hands for the joint-moment overlay (kg). */
+  handLoadKg: 0,
+  /** Weight lifting mode. */
+  lift: 'squat',
+  liftLoadKg: NaN,
+  liftUnit: 'kg' as 'kg' | 'lb',
+  plateDiameterM: 0.45,
+  /** Video files: how many times slower than real life the footage plays. */
+  slowMotion: 1,
 };
 
 export const layers: Layers = {
@@ -40,6 +53,8 @@ export const layers: Layers = {
   bones: false, bonesOpacity: 0.85, muscles: false, musclesOpacity: 0.6, highlight: null,
   systems: { organs: false, arteries: false, veins: false, nerves: false, ligaments: false, lymph: false, landmarks: false },
   systemsOpacity: 0.85, find: null,
+  planes: { sagittal: false, frontal: false, transverse: false }, planeAxes: { sagittal: false, frontal: false, transverse: false },
+  planeCentre: 'body', planeInset: true, gravity: false, vectors: false, moment: null,
 };
 
 export const cal: { current: Calibration } = { current: defaultCalibration(720) };
