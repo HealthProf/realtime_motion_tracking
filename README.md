@@ -14,6 +14,8 @@ device: no video or data is uploaded.
 - Exports a kinematics CSV with a methods header, a raw landmark CSV, a reloadable session file,
   PNG screenshots of key moments, and a local video with the overlays.
 - Instant replay of the last 10 to 20 seconds with measurements intact.
+- Delayed view: the picture and measurements from 5 to 60 seconds ago (adjustable), so a person can
+  perform a movement and then turn to the screen and watch it. A small live picture stays in the corner.
 - Activity presets (squat, sit-to-stand, vertical jump, gait, overhead reach), repetition detection,
   left/right symmetry (front views), and jump height from flight time.
 - A setup coach that checks framing, distance, movement plane, tracking confidence, frame rate and camera level.
@@ -83,7 +85,7 @@ src/kinematics/   filters, resampling, derivatives, angles, calibration (pure fu
 src/analysis/     centre of mass, repetitions, symmetry, jump, residual analysis, body planes,
                   static joint moments, standing-height calibration
 src/lift/         plate detection and tracking, barbell mechanics
-src/capture/      trials, processing, CSV/session export, video, replay buffer
+src/capture/      trials, processing, CSV/session export, video, replay buffer, delayed view
 src/pose/         pose model wrapper, keypoint topology, synthetic demo poses
 src/coach/        setup checks
 src/anatomy/      schematic anatomy layers (bones, muscles, systems), structure catalog, search

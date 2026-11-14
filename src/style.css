@@ -67,7 +67,13 @@ label.block { margin-top: 0.6rem; }
 label.grow { flex: 1 1 10rem; }
 .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
 .row > label { flex: 0 1 auto; }
-.transport, #replay-bar, #video-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.transport, #replay-bar, #video-bar, #delay-bar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+#delay-bar { column-gap: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.5rem; }
+#delay-bar.on { border-color: var(--accent); }
+#delay-bar .delay-set { flex: 1 1 16rem; display: grid; gap: 0.15rem; }
+#delay-bar .delay-set label { display: flex; align-items: center; gap: 0.5rem; }
+#delay-bar .delay-set output { min-width: 3.2rem; text-align: right; }
+#delay-bar p { margin: 0; }
 #replay-bar, #video-bar { background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 0.5rem; }
 #replay-bar label, #video-bar label { display: flex; align-items: center; gap: 0.4rem; }
 .clock { font-variant-numeric: tabular-nums; font-weight: 650; }

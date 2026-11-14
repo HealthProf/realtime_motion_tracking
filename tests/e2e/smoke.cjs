@@ -71,6 +71,24 @@ const fake = process.env.FAKE_VIDEO;
     assert.match(await page.textContent('#replay-time'), /\d+\.\d+ \/ \d+\.\d+ s/);
     await page.click('#replay-exit');
 
+    // Delayed view: fills, then shows the earlier picture; trials keep their data but record no video.
+    await page.evaluate(() => { const el = document.getElementById('delay-seconds'); el.value = '5'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.match(await page.textContent('#delay-note'), /at 5 s the picture is kept up to \d+ pixels wide/);
+    await page.keyboard.press('d');
+    assert.ok(await page.isChecked('#delay-on'), 'D switches the delayed view on');
+    assert.ok(await page.isDisabled('#chk-video'), 'trial video is unavailable while delayed');
+    assert.equal(await page.textContent('#live-tag'), 'delayed 5 s');
+    await page.waitForFunction(() => /Showing the picture from 5 s ago/.test(document.getElementById('delay-state').textContent), null, { timeout: 12000 });
+    await page.waitForFunction(() => /\d/.test(document.querySelector('#readouts tbody tr td:nth-child(2)').textContent));
+    await page.click('#btn-trial');
+    await page.waitForTimeout(1500);
+    await page.click('#btn-trial');
+    await page.waitForSelector('#results:not([hidden])');
+    assert.ok(await page.isHidden('#btn-video-dl'), 'no video is saved from the delayed view');
+    await page.uncheck('#delay-on');
+    assert.equal(await page.textContent('#live-tag'), 'live estimate');
+    assert.ok(!(await page.isDisabled('#chk-video')), 'trial video is available again');
+
     // Session round trip: reload, import, export again, compare CSVs.
     await page.goto(URL);
     await openAll();

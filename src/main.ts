@@ -9,6 +9,7 @@ import { findExtrema } from './modes/cycles';
 import { closeCamera, listCameras, openCamera, startFrameLoop, type OpenCamera } from './camera/camera';
 import { parseSession } from './capture/csv';
 import { canvasPng, download, stamp, VideoRecorder } from './capture/media';
+import { clampDelay, delayWidth, pickDelayed } from './capture/delay';
 import { ReplayBuffer, ReplayPlayer, type ReplayEntry } from './capture/replay';
 import { storeFrame, TrialRecorder, type Trial, type TrialMeta } from './capture/trial';
 import { frameRate, resample, uniformGrid } from './kinematics/series';
@@ -20,7 +21,7 @@ import { calibrateFromLength, defaultCalibration } from './kinematics/calibratio
 import { FpsMeter, LiveEngine, type LiveSample } from './live';
 import { ANGLES, ANGLE_BY_ID, DEG } from './measure/definitions';
 import { Landmarker } from './pose/landmarker';
-import { L, POINT_LABELS, TRACKABLE_POINTS, type PointId } from './pose/landmarks';
+import { L, POINT_LABELS, SKELETON, TRACKABLE_POINTS, type PointId } from './pose/landmarks';
 import { syntheticBar, syntheticFrame, SYNTH, type SyntheticActivity } from './pose/synthetic';
 import { PRESETS, PRESET_BY_ID, resolvePreset } from './presets/presets';
 import { drawChart, legendHtml, PALETTE, type Series } from './render/chart';
@@ -37,8 +38,13 @@ const live = new LiveEngine();
 const fpsMeter = new FpsMeter();
 const recorder = new TrialRecorder();
 const videoRec = new VideoRecorder();
-const replay = new ReplayBuffer(isMobile ? 10 : 20, isMobile ? 480 : 640);
+const REPLAY_SECONDS = isMobile ? 10 : 20, REPLAY_WIDTH = isMobile ? 480 : 640;
+/** Sharpest stored picture for short delays; the picture is stored smaller as the delay grows. */
+const DELAY_MAX_WIDTH = isMobile ? 960 : 1280;
+const replay = new ReplayBuffer(REPLAY_SECONDS, REPLAY_WIDTH, (isMobile ? 96 : 192) * 1e6);
 const player = new ReplayPlayer();
+/** Delayed view: the buffered frame now on screen, and the live picture for the corner inset. */
+const delay = { player: new ReplayPlayer(), busy: false, last: null as ReplayEntry | null, shown: null as LiveSample | null, liveBg: null as CanvasImageSource | null, liveMirror: false };
 const MAX_TRIAL_SECONDS = 120;
 const HISTORY_SECONDS = 10;
 
@@ -142,7 +148,7 @@ function buildSelectionUi(): void {
   $('point-list').addEventListener('change', onToggle);
   $('preset').addEventListener('change', () => { settings.preset = $<HTMLSelectElement>('preset').value; applyPreset(true); });
   $('side').addEventListener('change', () => { settings.side = $<HTMLSelectElement>('side').value as typeof settings.side; applyPreset(); });
-  $('convention').addEventListener('change', () => { settings.convention = $<HTMLSelectElement>('convention').value as typeof settings.convention; live.reset(); selectionChanged(); });
+  $('convention').addEventListener('change', () => { settings.convention = $<HTMLSelectElement>('convention').value as typeof settings.convention; live.reset(); if (delayActive()) { replay.clear(); resetDelayView(); } selectionChanged(); });
   $('bodymodel').addEventListener('change', () => { settings.bodyModel = $<HTMLSelectElement>('bodymodel').value as typeof settings.bodyModel; if (hasTrial()) reprocess(); });
   $('minvis').addEventListener('input', () => {
     settings.minVisibility = Number($<HTMLInputElement>('minvis').value);
@@ -165,7 +171,7 @@ function trailsFrom(samples: LiveSample[]): Map<PointId, { x: number; y: number 
   return m;
 }
 
-function render(sample: LiveSample | null, bg: CanvasImageSource | null, mirrorBg: boolean, trailSamples: LiveSample[], hudExtra: string[] = []): void {
+function render(sample: LiveSample | null, bg: CanvasImageSource | null, mirrorBg: boolean, trailSamples: LiveSample[], hudExtra: string[] = [], banner: { text: string; sub: string } | null = null): void {
   const w = sample?.w ?? canvas.width, h = sample?.h ?? canvas.height;
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   const hud = [...hudExtra];
@@ -176,8 +182,8 @@ function render(sample: LiveSample | null, bg: CanvasImageSource | null, mirrorB
     w, h, bg, mirrorBg, sample, layers, angles: settings.angles, minVisibility: settings.minVisibility, calibration: cal.current,
     mirrored: settings.mirror && source?.kind === 'camera', trails: trailsFrom(trailSamples), picks, hud, recording: recorder.recording, time: animTime(),
     bodyModel: settings.bodyModel, bodyMassKg: settings.bodyMassKg, loadKg: lift ? settings.liftLoadKg || 0 : settings.handLoadKg,
-    barTrail: !lift ? [] : rp ? trailSamples.flatMap((x) => (x.bar ? [{ x: x.bar.px, y: x.bar.py }] : [])) : barTrail,
-    proposal: lift && !tracker.lock && !rp ? proposal : null, countdown: countdownView(),
+    barTrail: !lift ? [] : rp || delayActive() ? trailSamples.flatMap((x) => (x.bar ? [{ x: x.bar.px, y: x.bar.py }] : [])) : barTrail,
+    proposal: lift && !tracker.lock && !rp && !delayActive() ? proposal : null, countdown: banner ?? countdownView(),
   });
   teachInfo = { gravity: res.gravity, moment: res.moment, view: res.view, facing: res.facing };
   musclesDrawn = res.musclesDrawn;
@@ -392,22 +398,29 @@ function onPose(frame: PoseFrame, bg: CanvasImageSource | null, mirrorBg: boolea
     while (barTrail.length > 4000 || (!recorder.recording && barTrail.length > 2 && (frame.t - barTrail[0].t > 4 || frame.t < barTrail[0].t))) barTrail.shift();
   }
   tickCountdown(sample);
-  recent.push(sample);
-  while (recent.length > 2 && sample.t - recent[0].t > 1.5) recent.shift();
-  pushHistory(sample);
   recorder.add(frame);
-  render(sample, bg, mirrorBg, recent);
   replay.push(frame, sample, bg, mirrorBg);
+  const delayed = delayActive();
+  if (delayed) {
+    delay.liveBg = bg;
+    delay.liveMirror = mirrorBg;
+    showDelayed(frame.t);
+  } else {
+    recent.push(sample);
+    while (recent.length > 2 && sample.t - recent[0].t > 1.5) recent.shift();
+    pushHistory(sample);
+    render(sample, bg, mirrorBg, recent);
+  }
 
   const now = performance.now();
   if (recorder.recording) {
     $('trial-clock').textContent = `${recorder.elapsed.toFixed(1)} s`;
     if (recorder.elapsed >= MAX_TRIAL_SECONDS) { say(`Trial stopped automatically at ${MAX_TRIAL_SECONDS} s.`); void stopTrial(); }
   }
-  if (now - throttle.readouts > 120) { throttle.readouts = now; updateReadouts(sample); }
+  if (now - throttle.readouts > 120) { throttle.readouts = now; updateReadouts(delayed ? delay.shown : sample); }
   if (now - throttle.chart > 100) { throttle.chart = now; updateLiveChart(); }
   if (now - throttle.coach > 400) { throttle.coach = now; updateCoach(sample); updateMuscleList(); updateFindStatus(); updateLiveRep(); updateTeachStatus(); }
-  if (now - throttle.chips > 500) { throttle.chips = now; updateChips(); }
+  if (now - throttle.chips > 500) { throttle.chips = now; updateChips(); if (settings.delayOn) updateDelayState(); }
   if (now - throttle.sides > 1500 && !customSelection && !recorder.recording && settings.side === 'auto') { throttle.sides = now; applyPreset(); }
 }
 
@@ -423,9 +436,7 @@ function resetForNewSource(w: number, h: number): void {
   live.reset();
   fpsMeter.reset();
   replay.clear();
-  recent = [];
-  history.t = [];
-  history.series.clear();
+  resetDelayView();
   lastSample = null;
   if (cal.current.method === 'none' || canvas.width !== w || canvas.height !== h) {
     cal.current = defaultCalibration(h);
@@ -458,6 +469,7 @@ async function stopSource(): Promise<void> {
   barTrail = [];
   countdown = null;
   source = null;
+  resetDelayView();
   setRunning(false);
   updateChips();
 }
@@ -737,12 +749,13 @@ function startTrial(): void {
   if (!customSelection && settings.side === 'auto') applyPreset();
   barTrail = [];
   recorder.start(buildMeta());
-  if ($<HTMLInputElement>('chk-video').checked && videoRec.supported) videoRec.start(canvas, fpsMeter.fps);
+  // The view is the delayed picture while the delay is on, so a recording of it would not match the data.
+  if ($<HTMLInputElement>('chk-video').checked && videoRec.supported && !delayActive()) videoRec.start(canvas, fpsMeter.fps);
   const b = $<HTMLButtonElement>('btn-trial');
   b.innerHTML = 'Stop trial <kbd>Space</kbd>';
   b.classList.add('recording');
   $<HTMLButtonElement>('btn-mark').disabled = false;
-  say('Recording trial. Press M to mark key moments.');
+  say(delayActive() ? 'Recording trial (measurements only: no video while the delayed view is on). Press M to mark key moments.' : 'Recording trial. Press M to mark key moments.');
 }
 
 async function stopTrial(): Promise<void> {
@@ -777,7 +790,167 @@ function markMoment(): void {
   if (!recorder.recording) return;
   const n = (recorder.trial?.marks.length ?? 0) + 1;
   const m = recorder.mark(`mark ${n}`);
-  if (m) { void screenshot(`Key moment ${n} at ${m.t.toFixed(2)} s`); say(`Marked key moment ${n} at ${m.t.toFixed(2)} s.`); }
+  if (!m) return;
+  // The picture on screen is from earlier while the delay is on, so it is not a picture of this moment.
+  if (delayActive()) { say(`Marked key moment ${n} at ${m.t.toFixed(2)} s (no screenshot while the delayed view is on).`); return; }
+  void screenshot(`Key moment ${n} at ${m.t.toFixed(2)} s`);
+  say(`Marked key moment ${n} at ${m.t.toFixed(2)} s.`);
+}
+
+// ---- Delayed view ------------------------------------------------------------------------------
+
+/** The delay applies to the camera and the demo; a video file is already a recording. */
+const delayActive = () => settings.delayOn && !!source && source.kind !== 'video';
+const shotCaption = () => (rp ? 'Replay frame' : delayActive() ? `Delayed view (${settings.delaySeconds} s ago)` : 'Screenshot');
+
+/** Sizes the shared replay buffer: long enough for the delay, with the picture stored smaller as the delay grows. */
+function configureReplay(): void {
+  if (!settings.delayOn) { replay.configure(REPLAY_SECONDS, REPLAY_WIDTH); return; }
+  const seconds = Math.max(REPLAY_SECONDS, settings.delaySeconds + 1);
+  // At most about 30 pictures a second are kept, so a 60 frames-per-second camera does not double the memory.
+  replay.configure(seconds, delayWidth(seconds, REPLAY_WIDTH, DELAY_MAX_WIDTH), 0.024);
+}
+
+/** Forgets what the view was showing. The plots and trails restart, because their time line has jumped. */
+function resetDelayView(): void {
+  delay.last = null;
+  delay.shown = null;
+  recent = [];
+  history.t = [];
+  history.series.clear();
+}
+
+function setDelay(on: boolean): void {
+  if (on && videoRec.active) {
+    $<HTMLInputElement>('delay-on').checked = false;
+    say('Stop the trial before switching the delayed view on: the trial video is being recorded from this view.');
+    return;
+  }
+  settings.delayOn = on;
+  configureReplay();
+  resetDelayView();
+  if (!on) { delay.player.dispose(); delay.liveBg = null; }
+  updateDelayUi();
+  say(!on ? 'Delayed view off. The picture is live again.'
+    : source?.kind === 'video' ? 'Delayed view is on, but it only applies to the camera and the demo, not to video files.'
+    : `Delayed view on: the picture and measurements are from ${settings.delaySeconds} s ago. The small picture in the corner is live.`);
+}
+
+function updateDelayUi(): void {
+  const d = settings.delaySeconds, on = settings.delayOn;
+  const slider = $<HTMLInputElement>('delay-seconds');
+  $<HTMLInputElement>('delay-on').checked = on;
+  slider.value = String(d);
+  slider.setAttribute('aria-valuetext', `${d} seconds`);
+  $('delay-out').textContent = `${d} s`;
+  $('delay-bar').classList.toggle('on', on);
+  const width = delayWidth(Math.max(REPLAY_SECONDS, d + 1), REPLAY_WIDTH, DELAY_MAX_WIDTH);
+  $('delay-note').textContent = `Shows what the camera saw 5 to 60 seconds ago, so you can move and then turn to watch. Longer delays store a less sharp picture so that memory use stays about the same: at ${d} s the picture is kept up to ${width} pixels wide${width > REPLAY_WIDTH ? `, falling to ${REPLAY_WIDTH} at 60 s` : ''}.`;
+  const chk = $<HTMLInputElement>('chk-video');
+  chk.disabled = on;
+  chk.parentElement!.title = on ? 'Not available while the delayed view is on: the video would be out of step with the measurements.' : '';
+  $('live-tag').textContent = on ? `delayed ${d} s` : 'live estimate';
+  updateDelayState();
+}
+
+function updateDelayState(): void {
+  const el = $('delay-state');
+  let text = '';
+  if (settings.delayOn) {
+    const e = replay.entries, wait = lastSample ? pickDelayed((i) => e[i].frame.t, e.length, lastSample.t, settings.delaySeconds).wait : settings.delaySeconds;
+    const mb = `${(replay.bytes / 1e6).toFixed(0)} MB of video held in memory`;
+    text = !source ? 'Starts when the camera starts. Trials record measurements only while this is on.'
+      : source.kind === 'video' ? 'Not used with video files.'
+      : rp ? 'Paused during instant replay.'
+      : wait > 0 ? `Filling: the delayed picture starts in ${Math.ceil(wait)} s.`
+      : `Showing the picture from ${settings.delaySeconds} s ago. ${replay.bytes > 0 ? `${mb}${replay.storedWidth ? `, ${replay.storedWidth} pixels wide` : ''}. ` : ''}Trials record measurements only.`;
+  }
+  if (el.textContent !== text) el.textContent = text;
+}
+
+/** Text with a dark backing, sized to be read from across a room. */
+function badge(str: string, x: number, y: number, size: number, color: string, align: CanvasTextAlign): void {
+  ctx.font = `700 ${size}px system-ui, sans-serif`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(str).width, pad = size * 0.4;
+  const left = align === 'center' ? x - tw / 2 : align === 'right' ? x - tw : x;
+  ctx.fillStyle = 'rgba(11,18,32,0.78)';
+  ctx.fillRect(left - pad, y - size * 0.72, tw + 2 * pad, size * 1.44);
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+}
+
+/** Label for the delayed picture and a small live picture in the corner, so framing can still be checked. */
+function drawDelayChrome(label: string): void {
+  const W = canvas.width, H = canvas.height, k = Math.max(W, H) / 1000;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (label) badge(label, W / 2, 30 * k, 26 * k, '#fde047', 'center');
+  const iw = Math.round(W * (H > W ? 0.3 : 0.24)), ih = Math.round((iw * H) / W), x0 = Math.round(12 * k), y0 = H - ih - Math.round(12 * k);
+  ctx.fillStyle = '#0b1220';
+  ctx.fillRect(x0, y0, iw, ih);
+  if (delay.liveBg) {
+    try {
+      if (delay.liveMirror) { ctx.save(); ctx.translate(x0 + iw, y0); ctx.scale(-1, 1); ctx.drawImage(delay.liveBg, 0, 0, iw, ih); ctx.restore(); }
+      else ctx.drawImage(delay.liveBg, x0, y0, iw, ih);
+    } catch { /* the source went away between frames */ }
+  }
+  const s = lastSample;
+  if (s?.lm) {
+    const sx = iw / s.w, sy = ih / s.h, lm = s.lm;
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = Math.max(1, 1.6 * k);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const [a, b] of SKELETON) {
+      const p = lm[L[a]], q = lm[L[b]];
+      if (p.v < settings.minVisibility || q.v < settings.minVisibility) continue;
+      ctx.moveTo(x0 + p.x * sx, y0 + p.y * sy);
+      ctx.lineTo(x0 + q.x * sx, y0 + q.y * sy);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = Math.max(1, 2 * k);
+  ctx.strokeRect(x0, y0, iw, ih);
+  badge('LIVE', x0 + 8 * k, y0 + 14 * k, 13 * k, '#f8fafc', 'left');
+  ctx.restore();
+}
+
+/** Draws the buffered frame from `delaySeconds` before `now`, or a countdown while the buffer fills. */
+function showDelayed(now: number): void {
+  const entries = replay.entries, d = settings.delaySeconds;
+  const pick = pickDelayed((i) => entries[i].frame.t, entries.length, now, d);
+  if (pick.index < 0) {
+    if (delay.last || recent.length) resetDelayView();
+    if (!delay.busy) render(null, null, false, [], [], { text: String(Math.ceil(pick.wait)), sub: `seconds until the picture from ${d} s ago starts` });
+    drawDelayChrome('');
+    return;
+  }
+  // Pictures are stored for at most every other frame at high frame rates: step back to a frame that has one,
+  // so the skeleton drawn is the one that belongs to the picture.
+  let i = pick.index;
+  for (let j = i; j >= 0 && i - j <= 4; j--) if (entries[j].image) { i = j; break; }
+  const entry = entries[i];
+  if (entry === delay.last || delay.busy) { drawDelayChrome(delay.last ? `DELAYED ${d} s` : ''); return; }
+  const draw = (bmp: ImageBitmap | null) => {
+    if (recent.length && entry.sample.t <= recent[recent.length - 1].t) resetDelayView();
+    delay.last = entry;
+    delay.shown = entry.sample;
+    recent.push(entry.sample);
+    while (recent.length > 2 && entry.sample.t - recent[0].t > 1.5) recent.shift();
+    pushHistory(entry.sample);
+    render(entry.sample, bmp, false, recent);
+    drawDelayChrome(`DELAYED ${d} s`);
+  };
+  if (!entry.image) { draw(null); return; }
+  const src = source;
+  delay.busy = true;
+  delay.player.image(entries, i).then((bmp) => {
+    delay.busy = false;
+    if (source === src && delayActive() && !rp && replay.entries.includes(entry)) draw(bmp);
+  }, () => { delay.busy = false; });
 }
 
 // ---- Instant replay ----------------------------------------------------------------------------
@@ -805,6 +978,7 @@ function enterReplay(): void {
   $('replay-bar').hidden = false;
   $<HTMLButtonElement>('btn-trial').disabled = true;
   say(`Replaying the last ${replay.duration.toFixed(1)} s. Live tracking is paused.`);
+  updateDelayState();
   void showReplayFrame(Math.max(0, rp.entries.length - 1));
   slider.focus();
 }
@@ -818,7 +992,9 @@ function exitReplay(): void {
   $<HTMLButtonElement>('btn-trial').disabled = !source;
   live.reset();
   recent = [];
-  say('Back to live.');
+  if (settings.delayOn) resetDelayView();
+  say(delayActive() ? `Back to the delayed view (${settings.delaySeconds} s).` : 'Back to live.');
+  updateDelayState();
 }
 
 function playReplay(): void {
@@ -863,6 +1039,8 @@ function calibrationChanged(message: string): void {
   live.reset();
   history.t = [];
   history.series.clear();
+  // Buffered measurements are in the old units: start the delayed view again rather than mislabel them.
+  if (delayActive()) { replay.clear(); resetDelayView(); }
   calStatus(message);
   say(message);
 }
@@ -881,6 +1059,7 @@ function onCanvasClick(ev: MouseEvent): void {
   if (!pickMode) {
     // Weight lifting mode: a tap on the plate starts following it.
     if (!isLift() || rp || !lastBg) return;
+    if (delayActive()) { say(`Switch the delayed view off to tap the plate: the picture on screen is from ${settings.delaySeconds} s ago.`); return; }
     const t = lastSample?.t ?? NaN;
     if (proposal && Math.hypot(p.x - proposal.x, p.y - proposal.y) <= proposal.r) { lockPlate(proposal, t); return; }
     const size = Math.min(canvas.width, canvas.height);
@@ -1212,7 +1391,7 @@ function init(): void {
   $('btn-stop').addEventListener('click', () => { void stopSource(); say('Source stopped.'); });
   $('btn-trial').addEventListener('click', () => (recorder.recording ? void stopTrial() : startTrial()));
   $('btn-mark').addEventListener('click', markMoment);
-  $('btn-shot').addEventListener('click', () => void screenshot(rp ? 'Replay frame' : 'Screenshot'));
+  $('btn-shot').addEventListener('click', () => void screenshot(shotCaption()));
   $('btn-replay').addEventListener('click', () => (rp ? exitReplay() : enterReplay()));
   $('replay-exit').addEventListener('click', exitReplay);
   $('replay-play').addEventListener('click', playReplay);
@@ -1220,12 +1399,20 @@ function init(): void {
   $('replay-next').addEventListener('click', () => rp && void showReplayFrame(rp.i + 1));
   $('replay-slider').addEventListener('input', () => { if (rp) { rp.playing = false; $('replay-play').textContent = 'Play'; void showReplayFrame(Number($<HTMLInputElement>('replay-slider').value)); } });
   $('replay-save').addEventListener('click', replayToTrial);
+  $('delay-on').addEventListener('change', () => setDelay($<HTMLInputElement>('delay-on').checked));
+  $('delay-seconds').addEventListener('input', () => {
+    settings.delaySeconds = clampDelay(Number($<HTMLInputElement>('delay-seconds').value));
+    configureReplay();
+    resetDelayView();
+    updateDelayUi();
+  });
+  updateDelayUi();
   $('btn-gallery-all').addEventListener('click', () => shots.forEach((s, i) => setTimeout(() => download(s.blob, s.name), i * 300)));
 
   $('camera').addEventListener('change', () => { if (source?.kind === 'camera') void startCamera(); });
   $('fps').addEventListener('change', () => { settings.fps = Number($<HTMLSelectElement>('fps').value); if (source?.kind === 'camera') void startCamera(); });
   $('tier').addEventListener('change', () => { settings.tier = $<HTMLSelectElement>('tier').value as ModelTier; if (source?.kind === 'camera') void startCamera(); });
-  $('mirror').addEventListener('change', () => { settings.mirror = $<HTMLInputElement>('mirror').checked; mirrorTouched = true; live.reset(); replay.clear(); recent = []; });
+  $('mirror').addEventListener('change', () => { settings.mirror = $<HTMLInputElement>('mirror').checked; mirrorTouched = true; live.reset(); replay.clear(); recent = []; if (settings.delayOn) resetDelayView(); });
 
   $('btn-cal-pick').addEventListener('click', () => setPickMode('cal'));
   $('btn-origin').addEventListener('click', () => setPickMode('origin'));
@@ -1262,7 +1449,8 @@ function init(): void {
       e.preventDefault();
       if (source && !rp) (recorder.recording ? void stopTrial() : startTrial());
     } else if (e.key === 'm' || e.key === 'M') markMoment();
-    else if ((e.key === 's' || e.key === 'S') && source) void screenshot(rp ? 'Replay frame' : 'Screenshot');
+    else if ((e.key === 's' || e.key === 'S') && source) void screenshot(shotCaption());
+    else if (e.key === 'd' || e.key === 'D') setDelay(!settings.delayOn);
     else if ((e.key === 'r' || e.key === 'R') && source) (rp ? exitReplay() : enterReplay());
     else if (e.key === 'Escape' && pickMode) { setPickMode(null); say('Cancelled.'); }
   });

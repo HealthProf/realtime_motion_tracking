@@ -63,6 +63,18 @@
         <span id="trial-clock" class="clock" aria-live="off"></span>
       </div>
 
+      <div id="delay-bar" role="group" aria-label="Delayed view">
+        <label class="inline"><input type="checkbox" id="delay-on" aria-keyshortcuts="D"> Delayed view <kbd>D</kbd></label>
+        <div class="delay-set">
+          <p id="delay-note" class="muted"></p>
+          <label>Delay
+            <input type="range" id="delay-seconds" min="5" max="60" step="1" value="10" aria-describedby="delay-note">
+            <output id="delay-out" for="delay-seconds" class="clock">10 s</output>
+          </label>
+          <p id="delay-state" class="muted"></p>
+        </div>
+      </div>
+
       <div id="video-bar" hidden role="group" aria-label="Video file controls">
         <button id="video-play">Play</button>
         <button id="video-prev" aria-label="Previous frame">&#9664;</button>
@@ -93,7 +105,7 @@
 
       <div class="card">
         <div class="card-head">
-          <h2>Live measurements <span class="tag" title="Smoothed with a causal filter, so values lag slightly. Exported data are re-filtered without lag.">live estimate</span></h2>
+          <h2>Live measurements <span class="tag" id="live-tag" title="Smoothed with a causal filter, so values lag slightly. Exported data are re-filtered without lag.">live estimate</span></h2>
           <label>Plot
             <select id="live-chart-mode">
               <option value="angle">Angles</option>
