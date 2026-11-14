@@ -3,7 +3,8 @@
 import { facingPlane, type PlaneId } from '../analysis/bodyFrame';
 import type { BodyModel } from '../analysis/com';
 import { baseOfSupport, staticMoment, type StaticJoint, type StaticMoment } from '../analysis/statics';
-import { buildRig, detectView, drawBones, drawMuscles, type JointGroup, type ViewInfo } from '../anatomy/anatomy';
+import { buildRig, detectView, drawMuscles, type JointGroup, type ViewInfo } from '../anatomy/anatomy';
+import { drawBones } from '../anatomy/bones';
 import { CATALOG_BY_ID } from '../anatomy/catalog';
 import { locate, type LocateResult } from '../anatomy/search';
 import { drawSystem, type SystemId } from '../anatomy/systems';
