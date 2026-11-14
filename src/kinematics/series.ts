@@ -101,3 +101,18 @@ export function pathLength(x: ArrayLike<number>, y: ArrayLike<number>): Float64A
   }
   return out;
 }
+
+/**
+ * Frame rate (Hz) from a run of frame timestamps. Counts how many frame intervals the run spans (a
+ * skipped frame counts as two) and divides by the time taken. Unlike 1 / median interval, this is not
+ * biased when timestamps are rounded, e.g. to the millisecond as in WebM files.
+ */
+export function frameRate(times: ArrayLike<number>): number {
+  const d: number[] = [];
+  for (let i = 1; i < times.length; i++) { const x = times[i] - times[i - 1]; if (x > 1e-6) d.push(x); }
+  if (d.length < 3) return NaN;
+  const med = median(d);
+  let frames = 0, total = 0;
+  for (const x of d) { frames += Math.max(1, Math.round(x / med)); total += x; }
+  return frames / total;
+}

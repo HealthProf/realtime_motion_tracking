@@ -83,3 +83,47 @@ export function centreOfMass(lm: Lm[] | null, model: BodyModel, minVis: number):
   for (const n of ['l_shoulder', 'r_shoulder', 'l_hip', 'r_hip'] as const) vmin = Math.min(vmin, lm[L[n]].v);
   return { com: { x: sx / sm, y: sy / sm, z: sz / sm, v: vmin }, mirrored };
 }
+
+export type SegGroup = 'head' | 'trunk' | 'upper_arm' | 'forearm' | 'hand' | 'thigh' | 'shank' | 'foot';
+export interface SegmentCentre {
+  group: SegGroup;
+  side: 'l' | 'r' | 'c';
+  /** Percent of body mass. */
+  mass: number;
+  x: number;
+  y: number;
+  /** True when this hidden segment was placed using the opposite limb. */
+  mirrored: boolean;
+}
+
+/**
+ * Centre of mass and mass fraction of every body segment that can be located (same model and
+ * approximations as `centreOfMass`). Segments hidden on both sides are left out.
+ */
+export function segmentCentres(lm: Lm[] | null, model: BodyModel, minVis: number): SegmentCentre[] {
+  if (!lm) return [];
+  const ok = (n: LandmarkName) => lm[L[n]].v >= minVis;
+  const out: SegmentCentre[] = [];
+  const earL = ok('l_ear'), earR = ok('r_ear');
+  if (earL || earR) {
+    const a = lm[earL ? L.l_ear : L.r_ear], b = lm[earR ? L.r_ear : L.l_ear];
+    out.push({ group: 'head', side: 'c', mass: pick(HEAD_MASS, model), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, mirrored: false });
+  }
+  if (ok('l_shoulder') && ok('r_shoulder') && ok('l_hip') && ok('r_hip')) {
+    const f = pick(TRUNK.cm, model) / 100;
+    const sx = (lm[L.l_shoulder].x + lm[L.r_shoulder].x) / 2, sy = (lm[L.l_shoulder].y + lm[L.r_shoulder].y) / 2;
+    const hx = (lm[L.l_hip].x + lm[L.r_hip].x) / 2, hy = (lm[L.l_hip].y + lm[L.r_hip].y) / 2;
+    out.push({ group: 'trunk', side: 'c', mass: pick(TRUNK.mass, model), x: sx + f * (hx - sx), y: sy + f * (hy - sy), mirrored: false });
+  }
+  for (let i = 0; i < LIMB_SEGMENTS.l.length; i++) {
+    const pair = { l: LIMB_SEGMENTS.l[i], r: LIMB_SEGMENTS.r[i] };
+    const vis = { l: ok(pair.l.prox as LandmarkName) && ok(pair.l.dist as LandmarkName), r: ok(pair.r.prox as LandmarkName) && ok(pair.r.dist as LandmarkName) };
+    for (const side of ['l', 'r'] as const) {
+      const from = vis[side] ? pair[side] : vis[side === 'l' ? 'r' : 'l'] ? pair[side === 'l' ? 'r' : 'l'] : null;
+      if (!from) continue;
+      const a = lm[L[from.prox as LandmarkName]], b = lm[L[from.dist as LandmarkName]], f = pick(pair[side].cm, model) / 100;
+      out.push({ group: pair[side].name.slice(2) as SegGroup, side, mass: pick(pair[side].mass, model), x: a.x + f * (b.x - a.x), y: a.y + f * (b.y - a.y), mirrored: !vis[side] });
+    }
+  }
+  return out;
+}

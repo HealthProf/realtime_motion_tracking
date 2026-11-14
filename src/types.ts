@@ -16,6 +16,18 @@ export interface PoseFrame {
   lm: Lm[] | null;
   /** 33 model-estimated 3D landmarks in metres (hip-centred, y down), or null. Experimental. */
   world: Lm[] | null;
+  /** Barbell position in weight lifting mode (image pixels), or null/undefined when not tracked. */
+  bar?: BarObs | null;
+}
+
+/** One observation of the barbell end. */
+export interface BarObs {
+  x: number;
+  y: number;
+  /** Plate radius in pixels; 0 when the position was inferred from the hands. */
+  r: number;
+  /** 'plate': circle tracked in the picture. 'hands': estimated from the wrist keypoints. */
+  src: 'plate' | 'hands';
 }
 
 export type ModelTier = 'lite' | 'full' | 'heavy';

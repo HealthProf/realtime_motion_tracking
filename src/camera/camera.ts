@@ -72,10 +72,11 @@ type RvfcVideo = HTMLVideoElement & {
  * (requestVideoFrameCallback); falls back to callback time when the browser lacks it.
  * The chosen timestamp source is fixed for the life of the loop and reported for export metadata.
  */
-export function startFrameLoop(video: HTMLVideoElement, onFrame: (t: number) => void): { stop: () => void; source: () => TimestampSource } {
+export function startFrameLoop(video: HTMLVideoElement, onFrame: (t: number) => void, force?: 'mediaTime'): { stop: () => void; source: () => TimestampSource } {
   const v = video as RvfcVideo;
   let running = true;
-  let source: TimestampSource = 'unknown';
+  // Video files have no capture time: their own presentation timestamps are the right clock.
+  let source: TimestampSource = force ?? 'unknown';
   let id = 0;
   if (v.requestVideoFrameCallback) {
     const step = (now: number, meta: VideoFrameMeta) => {

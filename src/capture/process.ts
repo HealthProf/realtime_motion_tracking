@@ -4,7 +4,8 @@ import { centreOfMass, type BodyModel } from '../analysis/com';
 import { includedAngle, unwrapDegrees } from '../kinematics/angles';
 import { filtfiltGaps } from '../kinematics/butterworth';
 import { toAnalysis } from '../kinematics/calibration';
-import { derivative, median, pathLength, resample, secondDerivative, uniformGrid } from '../kinematics/series';
+import { derivative, frameRate, median, pathLength, resample, secondDerivative, uniformGrid } from '../kinematics/series';
+import { liftSeries } from '../lift/metrics';
 import { ANGLE_BY_ID, applyConvention, evalAngle, type AngleDef, type Convention } from '../measure/definitions';
 import { getPoint, L, LANDMARK_NAMES, type PointId } from '../pose/landmarks';
 import type { Trial } from './trial';
@@ -56,7 +57,8 @@ export function processTrial(trial: Trial, o: ProcessOptions): Processed {
   const ft = frames.map((f) => f.t);
   const dts = ft.slice(1).map((t, i) => t - ft[i]);
   const medDt = median(dts);
-  const fs = o.fs ?? 1 / medDt;
+  const measured = frameRate(ft);
+  const fs = o.fs ?? (Number.isFinite(measured) ? measured : 1 / medDt);
   const dt = 1 / fs;
   const t = uniformGrid(0, ft[ft.length - 1], fs);
   let cutoff = o.cutoff;
@@ -65,7 +67,7 @@ export function processTrial(trial: Trial, o: ProcessOptions): Processed {
     warnings.push(`Cutoff reduced to ${cutoff.toFixed(1)} Hz (must stay well below the Nyquist frequency of ${(fs / 2).toFixed(1)} Hz).`);
   }
   const longIntervals = dts.filter((d) => d > 1.5 * medDt).length;
-  if (longIntervals > 0.05 * dts.length) warnings.push(`${longIntervals} of ${dts.length} frame intervals were more than 1.5x the median: the camera frame rate was unstable.`);
+  if (longIntervals > 0.05 * dts.length) warnings.push(`${longIntervals} of ${dts.length} frame intervals were more than 1.5x the median: the frame rate was unstable.`);
   if (fs < 24) warnings.push(`Low frame rate (${fs.toFixed(1)} Hz). Velocity and acceleration will be poorly resolved; improve the lighting.`);
   if (u === 'px') warnings.push('Not calibrated: lengths, velocities and accelerations are in pixels, not metres.');
   const detected = frames.filter((f) => f.lm).length;
@@ -173,6 +175,33 @@ export function processTrial(trial: Trial, o: ProcessOptions): Processed {
       }
       push(`${id}_deg_3d_experimental`, 'deg', out);
     }
+  }
+
+  // Weight lifting: the tracked bar, and (with a load) the force and power applied to it.
+  const barFrames = frames.filter((f) => f.bar).length;
+  if (barFrames >= 5) {
+    const bx = new Float64Array(frames.length).fill(NaN), by = new Float64Array(frames.length).fill(NaN);
+    frames.forEach((f, i) => { if (f.bar) { const a = toAnalysis(cal, f.bar.x, f.bar.y); bx[i] = a.x; by[i] = a.y; } });
+    const rx = resample(ft, bx, t, o.maxGap), ry = resample(ft, by, t, o.maxGap);
+    const fx = filtfiltGaps(rx, cutoff, fs), fy = filtfiltGaps(ry, cutoff, fs);
+    const load = trial.meta.lift?.loadKg ?? NaN, body = trial.meta.lift?.bodyMassKg ?? NaN;
+    const ls = liftSeries(fx, fy, fs, load > 0 ? load : 1);
+    push(`bar_x_${u}_raw`, u, rx); push(`bar_y_${u}_raw`, u, ry);
+    push(`bar_x_${u}`, u, fx); push(`bar_y_${u}`, u, fy);
+    push(`bar_vx_${u}_s`, `${u}/s`, ls.vx); push(`bar_vy_${u}_s`, `${u}/s`, ls.vy);
+    push(`bar_ax_${u}_s2`, `${u}/s^2`, ls.ax); push(`bar_ay_${u}_s2`, `${u}/s^2`, ls.ay);
+    if (u === 'm' && load > 0) {
+      push('bar_force_N', 'N', ls.force);
+      push('bar_power_W', 'W', ls.power);
+      if (body > 0) {
+        // Combined centre of mass of the lifter (segmental model) and the bar.
+        const com = point('com');
+        push('system_com_y_m', 'm', fy.map((b, i) => (body * com.fy[i] + load * b) / (body + load)));
+      }
+    }
+    const fromHands = frames.filter((f) => f.bar?.src === 'hands').length;
+    if (fromHands > 0.1 * barFrames) warnings.push(`The bar position was estimated from the hands, not the tracked plate, in ${Math.round((100 * fromHands) / barFrames)} % of frames. The wrist is not the bar centre, so bar path is approximate there.`);
+    if (barFrames < 0.9 * frames.length) warnings.push(`The bar was located in only ${Math.round((100 * barFrames) / frames.length)} % of frames.`);
   }
 
   const markRows = trial.marks.map((m) => ({ row: Math.min(t.length - 1, Math.max(0, Math.round(m.t * fs))), label: m.label }));

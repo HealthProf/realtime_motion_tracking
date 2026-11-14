@@ -1,6 +1,8 @@
 // Live (causal) processing for on-screen feedback. Values here lag slightly and are labelled
 // "live estimate"; exported data are re-filtered zero-phase after the trial.
+import { alignFacing, bodyFrame, frameFromView, FrameSmoother, type BodyFrame, type FrameMode } from './analysis/bodyFrame';
 import { centreOfMass, type BodyModel } from './analysis/com';
+import { detectView } from './anatomy/anatomy';
 import { includedAngle } from './kinematics/angles';
 import { toAnalysis, type Calibration } from './kinematics/calibration';
 import { OneEuro } from './kinematics/oneEuro';
@@ -16,6 +18,22 @@ export interface LiveSettings {
   bodyModel: BodyModel;
   calibration: Calibration;
   include3d: boolean;
+  /** True when the picture is mirrored (selfie view); needed to tell front from back. */
+  mirrored?: boolean;
+  frameMode?: FrameMode;
+}
+
+export interface LiveBar {
+  /** Analysis coordinates and velocity (calibrated units, y up). */
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Image pixels, for drawing. */
+  px: number;
+  py: number;
+  r: number;
+  src: 'plate' | 'hands';
 }
 
 export interface LiveAngle {
@@ -48,6 +66,9 @@ export interface LiveSample {
   com: Lm | null;
   angles: Map<string, LiveAngle>;
   points: Map<PointId, LivePoint>;
+  /** Smoothed anatomical frame of the body (planes and axes), or null. */
+  frame: BodyFrame | null;
+  bar: LiveBar | null;
 }
 
 const POS = { minCutoff: 1.7, beta: 0.01, dCutoff: 1 };
@@ -59,16 +80,25 @@ export class LiveEngine {
   private wF: OneEuro[] = [];
   private angF = new Map<string, OneEuro>();
   private ptF = new Map<PointId, { x: OneEuro; y: OneEuro; vx: OneEuro; vy: OneEuro }>();
+  private frameF = new FrameSmoother();
+  private barF = { x: new OneEuro(ANG), y: new OneEuro(ANG), vx: new OneEuro(VEL), vy: new OneEuro(VEL) };
 
   reset(): void {
     this.lmF = [];
     this.wF = [];
     this.angF.clear();
     this.ptF.clear();
+    this.frameF.reset();
+    Object.values(this.barF).forEach((x) => x.reset());
   }
 
   process(f: PoseFrame, s: LiveSettings): LiveSample {
-    const out: LiveSample = { t: f.t, w: f.w, h: f.h, lm: null, world: null, com: null, angles: new Map(), points: new Map() };
+    const out: LiveSample = { t: f.t, w: f.w, h: f.h, lm: null, world: null, com: null, angles: new Map(), points: new Map(), frame: null, bar: null };
+    if (f.bar) {
+      const a = toAnalysis(s.calibration, f.bar.x, f.bar.y), b = this.barF;
+      const x = b.x.filter(a.x, f.t), y = b.y.filter(a.y, f.t);
+      out.bar = { x, y, vx: b.vx.filter(b.x.derivative, f.t), vy: b.vy.filter(b.y.derivative, f.t), px: f.bar.x, py: f.bar.y, r: f.bar.r, src: f.bar.src };
+    } else Object.values(this.barF).forEach((x) => x.reset());
     if (!f.lm) return out;
     if (!this.lmF.length) for (let i = 0; i < 33 * 2; i++) this.lmF.push(new OneEuro(POS));
     out.lm = f.lm.map((p, i) => ({ x: this.lmF[2 * i].filter(p.x, f.t), y: this.lmF[2 * i + 1].filter(p.y, f.t), z: p.z, v: p.v }));
@@ -77,6 +107,11 @@ export class LiveEngine {
       out.world = f.world.map((p, i) => ({ x: this.wF[3 * i].filter(p.x, f.t), y: this.wF[3 * i + 1].filter(p.y, f.t), z: this.wF[3 * i + 2].filter(p.z, f.t), v: p.v }));
     }
     out.com = centreOfMass(out.lm, s.bodyModel, s.minVisibility)?.com ?? null;
+    {
+      const mirrored = !!s.mirrored, view = detectView(out.lm, out.world, mirrored);
+      const raw = bodyFrame(out.world, mirrored, s.frameMode ?? 'heading') ?? frameFromView(view.view, view.facing, out.lm[L.l_shoulder].x >= out.lm[L.r_shoulder].x, mirrored);
+      out.frame = this.frameF.update(view.view === 'lateral' ? alignFacing(raw, view.facing) : raw, f.t, mirrored);
+    }
 
     const resolve = (id: PointId) => {
       const p = getPoint(out.lm, id, s.minVisibility, out.com);

@@ -1,6 +1,9 @@
 // Draws one composited frame: video, anatomy layers, skeleton, measurements, HUD.
 // Everything on this canvas ends up in screenshots and recorded video.
-import { buildRig, detectView, drawBones, drawMuscles, type JointGroup } from '../anatomy/anatomy';
+import { facingPlane, type PlaneId } from '../analysis/bodyFrame';
+import type { BodyModel } from '../analysis/com';
+import { baseOfSupport, staticMoment, type StaticJoint, type StaticMoment } from '../analysis/statics';
+import { buildRig, detectView, drawBones, drawMuscles, type JointGroup, type ViewInfo } from '../anatomy/anatomy';
 import { CATALOG_BY_ID } from '../anatomy/catalog';
 import { locate, type LocateResult } from '../anatomy/search';
 import { drawSystem, type SystemId } from '../anatomy/systems';
@@ -8,6 +11,8 @@ import type { Calibration } from '../kinematics/calibration';
 import type { LiveSample } from '../live';
 import { ANGLE_BY_ID, DEG } from '../measure/definitions';
 import { getPoint, L, POINT_LABELS, sideOf, SKELETON, type PointId } from '../pose/landmarks';
+import type { Lm } from '../types';
+import { drawBar, drawCountdown, drawGravity, drawMoment, drawPlaneInset, drawPlanes, drawVelocityVectors, LabelPlacer } from './teach';
 
 export interface Layers {
   videoOpacity: number;
@@ -25,6 +30,18 @@ export interface Layers {
   systemsOpacity: number;
   /** Catalog id of the structure being searched for, or null. */
   find: string | null;
+  /** Cardinal planes and their axes of rotation. */
+  planes: Record<PlaneId, boolean>;
+  planeAxes: Record<PlaneId, boolean>;
+  /** Where the planes and axes are centred: 'body' (centre of mass), 'trunk', or a joint name. */
+  planeCentre: string;
+  planeInset: boolean;
+  /** Line of gravity and base of support. */
+  gravity: boolean;
+  /** Velocity vectors on the tracked points and rotating segments. */
+  vectors: boolean;
+  /** Joint for the gravitational moment overlay, or null. */
+  moment: StaticJoint | null;
 }
 
 export interface Scene {
@@ -46,11 +63,38 @@ export interface Scene {
   recording: boolean;
   /** Seconds, for animation (blood flow, search pulse). Null = no animation (reduced motion). */
   time: number | null;
+  bodyModel?: BodyModel;
+  /** Body mass (kg) and hand-held or barbell load (kg) for the joint-moment overlay. */
+  bodyMassKg?: number;
+  loadKg?: number;
+  /** Weight lifting mode: recent bar positions (image pixels) and a plate awaiting confirmation. */
+  barTrail?: { x: number; y: number }[];
+  proposal?: { x: number; y: number; r: number } | null;
+  /** Large centred countdown text, when a countdown is running. */
+  countdown?: { text: string; sub: string } | null;
 }
 
 export interface SceneResult {
   musclesDrawn: string[];
   search: LocateResult | null;
+  /** Results of the teaching overlays, for the text readouts beside the picture. */
+  gravity: string;
+  moment: StaticMoment | null;
+  view: ViewInfo | null;
+  facing: { plane: PlaneId; offDeg: number } | null;
+}
+
+/** Pixels per metre at the subject, from the trunk: its length in the picture against its estimated real length. */
+function pxPerMetre(lm: Lm[], world: Lm[] | null): number {
+  const mid = (a: Lm, b: Lm) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const ms = mid(lm[L.l_shoulder], lm[L.r_shoulder]), mh = mid(lm[L.l_hip], lm[L.r_hip]);
+  const px = Math.hypot(ms.x - mh.x, ms.y - mh.y) || 1;
+  if (world) {
+    const ws = mid(world[L.l_shoulder], world[L.r_shoulder]), wh = mid(world[L.l_hip], world[L.r_hip]);
+    const m = Math.hypot(ws.x - wh.x, ws.y - wh.y);
+    if (m > 0.15) return px / m;
+  }
+  return px / 0.5;
 }
 
 export const SIDE_COLOR = { l: '#ffb020', r: '#22d3ee', c: '#f8fafc' } as const;
@@ -71,6 +115,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, sc: Scene): SceneResult
   const { w, h, layers: ly } = sc;
   const k = Math.max(w, h) / 1000;
   let musclesDrawn: string[] = [];
+  let gravityText = '', moment: StaticMoment | null = null, view: ViewInfo | null = null;
+  const anyPlane = Object.values(ly.planes).some(Boolean) || Object.values(ly.planeAxes).some(Boolean);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#0b1220';
@@ -106,6 +152,27 @@ export function drawScene(ctx: CanvasRenderingContext2D, sc: Scene): SceneResult
       if (rig) for (const sys of ['ligaments', 'veins', 'arteries', 'nerves', 'lymph'] as const) if (ly.systems[sys]) drawSystem(ctx, sys, rig, o);
       if (ly.muscles) musclesDrawn = drawMuscles(ctx, lm, info, ly.musclesOpacity, ly.highlight, sc.minVisibility);
       if (rig && ly.systems.landmarks) drawSystem(ctx, 'landmarks', rig, { ...o, alpha: 1, labels: true });
+    }
+
+    view = info ?? ((anyPlane && ly.planeCentre !== 'body' && ly.planeCentre !== 'trunk') || ly.moment ? detectView(lm, s!.world, sc.mirrored) : null);
+    if (anyPlane && s!.frame) {
+      const ppm = pxPerMetre(lm, s!.world), o = { planes: ly.planes, axes: ly.planeAxes };
+      const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      const place = new LabelPlacer();
+      if (ly.planeCentre === 'body' || ly.planeCentre === 'trunk') {
+        const trunk = mid(mid(lm[L.l_shoulder], lm[L.r_shoulder]), mid(lm[L.l_hip], lm[L.r_hip]));
+        const whole = ly.planeCentre === 'body', c = whole && s!.com ? s!.com : trunk;
+        // With the vertical as the long axis, upright sheets span from the lowest foot to above the head.
+        const feet = Math.max(lm[L.l_heel].y, lm[L.r_heel].y, lm[L.l_toe].y, lm[L.r_toe].y), head = Math.min(lm[L.l_ear].y, lm[L.r_ear].y, lm[L.nose].y);
+        const span = whole && Math.abs(s!.frame.up.y) > 0.98 && feet > c.y && head < c.y ? { below: (feet - c.y) / ppm + 0.03, above: (c.y - head) / ppm + 0.22 } : undefined;
+        drawPlanes(ctx, s!.frame, c, ppm, whole ? 1 : 0.5, o, k, place, span);
+      } else if (view) {
+        const sides = view.view === 'lateral' ? [view.nearSide] : (['l', 'r'] as const);
+        sides.forEach((sd, i) => {
+          const p = lm[L[`${sd}_${ly.planeCentre}` as keyof typeof L]];
+          if (p && p.v >= sc.minVisibility) drawPlanes(ctx, s!.frame!, p, ppm, 0.3, o, k, i === 0 ? place : null);
+        });
+      }
     }
 
     if (ly.skeleton) {
@@ -157,6 +224,18 @@ export function drawScene(ctx: CanvasRenderingContext2D, sc: Scene): SceneResult
       ctx.fillStyle = '#0b1220';
       ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, r, 0, Math.PI / 2); ctx.closePath(); ctx.fill();
       ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, r, Math.PI, 1.5 * Math.PI); ctx.closePath(); ctx.fill();
+    }
+
+    if (ly.gravity && s!.com) gravityText = drawGravity(ctx, s!.com, baseOfSupport(lm, s!.com.x, sc.minVisibility), sc.calibration, h, k);
+    if (ly.vectors) drawVelocityVectors(ctx, s!, lm, sc.angles, sc.calibration, k);
+    if (ly.moment && view) {
+      const lw = lm[L.l_wrist], rw = lm[L.r_wrist];
+      const hands = s!.bar ? { x: s!.bar.px, y: s!.bar.py } : { x: (lw.x + rw.x) / 2, y: (lw.y + rw.y) / 2 };
+      moment = staticMoment({
+        lm, joint: ly.moment, side: view.nearSide, bodyModel: sc.bodyModel ?? 'average', minVisibility: sc.minVisibility, bodyMassKg: sc.bodyMassKg ?? NaN,
+        scale: sc.calibration.unit === 'm' ? sc.calibration.scale : NaN, load: sc.loadKg ? { kg: sc.loadKg, ...hands } : null,
+      });
+      if (moment) drawMoment(ctx, moment, k);
     }
 
     if (ly.labels) {
@@ -259,13 +338,17 @@ export function drawScene(ctx: CanvasRenderingContext2D, sc: Scene): SceneResult
     }
   }
 
+  if (s?.bar || sc.proposal || sc.barTrail?.length) drawBar(ctx, s?.bar ?? null, sc.proposal ?? null, sc.barTrail ?? [], k);
+  if (anyPlane && ly.planeInset) drawPlaneInset(ctx, w, h, k, s?.frame ?? null, { planes: ly.planes, axes: ly.planeAxes });
+  if (sc.countdown) drawCountdown(ctx, sc.countdown.text, sc.countdown.sub, w, h, k);
+
   sc.hud.forEach((line, i) => text(ctx, line, 14 * k, (22 + i * 24) * k, 16 * k));
   if (sc.recording) {
     ctx.fillStyle = '#ef4444';
     ctx.beginPath(); ctx.arc(w - 28 * k, 24 * k, 9 * k, 0, Math.PI * 2); ctx.fill();
     text(ctx, 'REC', w - 44 * k, 24 * k, 16 * k, '#fff', 'right');
   }
-  return { musclesDrawn, search };
+  return { musclesDrawn, search, gravity: gravityText, moment, view, facing: s?.frame ? facingPlane(s.frame) : null };
 }
 
 export const trailLabel = (id: PointId) => POINT_LABELS[id];

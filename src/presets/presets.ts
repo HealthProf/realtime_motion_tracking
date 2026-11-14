@@ -13,7 +13,7 @@ export interface Preset {
   points: string[];
   /** Joint used for repetition detection (unsided), if any. */
   repJoint: string | null;
-  analysis: ('reps' | 'jump' | 'symmetry' | 'bike' | 'run')[];
+  analysis: ('reps' | 'jump' | 'symmetry' | 'bike' | 'run' | 'lift')[];
   /** Frame rate below which the setup coach warns for this activity. */
   minFps?: number;
   /** Suggested low-pass cutoff (Hz) for typical performances of this activity. */
@@ -53,6 +53,10 @@ export const PRESETS: Preset[] = [
   {
     id: 'run', label: 'Running gait (treadmill)', view: null, joints: ['knee', 'hip', 'ankle', 'trunk_lean'], points: ['com', 'heel', 'toe'], repJoint: null, analysis: ['run'], cutoff: 8, minFps: 50,
     guidance: 'Treadmill only. Let the runner settle at their usual pace for several minutes first. Side view: camera at hip height, square to the treadmill, whole body in frame; record 20 to 30 seconds. Back view (a separate trial): camera directly behind. Use 60 fps and bright light: at 30 fps one frame is over a tenth of a ground contact.',
+  },
+  {
+    id: 'lift', label: 'Weight lifting (barbell)', view: 'sagittal', joints: ['knee', 'hip', 'trunk_lean'], points: [], repJoint: null, analysis: ['lift'], cutoff: 8, minFps: 30,
+    guidance: 'Side view with the end of the bar and its plate facing the camera. Calibrate first (the plate is the best reference because it lies in the plane the bar moves in), type in the load, then tap the plate in the picture so it can be followed. The lifter and the bar must stay in view for the whole lift.',
   },
 ];
 

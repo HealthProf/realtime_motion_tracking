@@ -8,7 +8,7 @@ export interface Calibration {
   /** Origin in image pixels (image y is down). */
   origin: Vec2;
   /** How the scale was obtained; recorded in exports. */
-  method: 'none' | 'reference-length' | 'subject-height';
+  method: 'none' | 'reference-length' | 'subject-height' | 'plate-diameter';
   /** Known length used for calibration, in metres. */
   referenceLength?: number;
 }

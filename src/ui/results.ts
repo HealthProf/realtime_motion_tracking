@@ -10,6 +10,7 @@ import type { Trial } from '../capture/trial';
 import { bodyYaw, classifyView } from '../coach/coach';
 import { filtfiltGaps } from '../kinematics/butterworth';
 import { derivative, median, secondDerivative } from '../kinematics/series';
+import { analyseLift, KG_PER_LB, LIFTS, type LiftAnalysis } from '../lift/metrics';
 import { ANGLE_BY_ID } from '../measure/definitions';
 import { L, POINT_LABELS, type PointId } from '../pose/landmarks';
 import { bikeFrontReport, bikeSideReport, type ModeInputs } from '../modes/bike';
@@ -30,6 +31,7 @@ interface Current {
 }
 let cur: Current | null = null;
 let modeReport: ModeReport | null = null;
+let liftReport: LiftAnalysis | null = null;
 /** Last report per mode and view, for the adjust-and-re-measure comparison. */
 const previousReports = new Map<string, { report: ModeReport; trialName: string }>();
 
@@ -75,7 +77,13 @@ function seriesOptions(p: Processed, o: ProcessOptions): { value: string; label:
   const out: { value: string; label: string }[] = [];
   if (o.angles.length) out.push({ value: 'angle', label: 'Angles' }, { value: 'angvel', label: 'Angular velocity' }, { value: 'angacc', label: 'Angular acceleration' });
   if (o.points.length) out.push({ value: 'py', label: 'Point height (y)' }, { value: 'px', label: 'Point horizontal position (x)' }, { value: 'pspeed', label: 'Point speed' }, { value: 'pvy', label: 'Point vertical velocity' }, { value: 'pacc', label: 'Point acceleration (magnitude)' });
-  if (o.angles.length >= 2) out.push({ value: 'angle-angle', label: `Angle-angle: ${angleLabel(o.angles[0])} vs ${angleLabel(o.angles[1])}` });
+  if (o.angles.length >= 2) out.push({ value: 'angle-angle', label: 'Angle-angle (one angle against another)' });
+  const u = p.lengthUnit;
+  if (p.col.has(`bar_y_${u}`)) {
+    out.unshift({ value: 'bar-y', label: 'Bar height' }, { value: 'bar-vy', label: 'Bar vertical velocity' }, { value: 'bar-ay', label: 'Bar vertical acceleration' });
+    if (p.col.has('bar_force_N')) out.splice(3, 0, { value: 'bar-force', label: 'Force on the bar' }, { value: 'bar-power', label: 'Power delivered to the bar' });
+    out.push({ value: 'bar-path', label: 'Bar path (side view)' });
+  }
   if (o.include3d && p.columns.some((c) => c.name.endsWith('_3d_experimental'))) out.push({ value: 'angle3d', label: '2D vs estimated 3D angles (experimental)' });
   return out;
 }
@@ -109,19 +117,35 @@ function renderChart(): void {
       yLabel = 'angle (deg)';
       break;
     case 'angle-angle': {
-      const x = p.col.get(`${o.angles[0]}_deg`)!, y = p.col.get(`${o.angles[1]}_deg`)!;
-      series.push({ label: `${angleLabel(o.angles[1])} against ${angleLabel(o.angles[0])}`, x, y, color: PALETTE[0] });
-      xLabel = `${angleLabel(o.angles[0])} (deg)`;
-      yLabel = `${angleLabel(o.angles[1])} (deg)`;
+      const ax = $<HTMLSelectElement>('res-aa-x').value || o.angles[0], ay = $<HTMLSelectElement>('res-aa-y').value || o.angles[1];
+      const x = p.col.get(`${ax}_deg`), y = p.col.get(`${ay}_deg`);
+      if (x && y) series.push({ label: `${angleLabel(ay)} against ${angleLabel(ax)}`, x, y, color: PALETTE[0] });
+      xLabel = `${angleLabel(ax)} (deg)`;
+      yLabel = `${angleLabel(ay)} (deg)`;
+      break;
+    }
+    case 'bar-y': add('Bar height', `bar_y_${u}`); yLabel = `height (${u})`; break;
+    case 'bar-vy': add('Bar vertical velocity', `bar_vy_${u}_s`); yLabel = `${u}/s`; break;
+    case 'bar-ay': add('Bar vertical acceleration', `bar_ay_${u}_s2`); yLabel = `${u}/s²`; break;
+    case 'bar-force': add('Vertical force on the bar', 'bar_force_N'); yLabel = 'N'; break;
+    case 'bar-power': add('Power delivered to the bar', 'bar_power_W'); yLabel = 'W'; break;
+    case 'bar-path': {
+      const x = p.col.get(`bar_x_${u}`), y = p.col.get(`bar_y_${u}`);
+      if (x && y) series.push({ label: 'Bar path (same scale on both axes)', x, y, color: '#a3e635' });
+      xLabel = `horizontal position (${u})`;
+      yLabel = `height (${u})`;
       break;
     }
   }
-  const timePlot = mode !== 'angle-angle';
+  $('res-aa').hidden = mode !== 'angle-angle';
+  const timePlot = mode !== 'angle-angle' && mode !== 'bar-path';
   const markers = timePlot ? [
     ...p.markRows.map((m) => ({ x: p.t[m.row], label: m.label, color: '#facc15' })),
     ...cur.reps.map((r, i) => ({ x: p.t[r.start], label: `rep ${i + 1}`, color: 'rgba(148,163,184,0.8)' })),
+    ...(mode.startsWith('bar-') ? (liftReport?.reps ?? []).flatMap((r, i) => [{ x: p.t[r.start], label: `lift ${i + 1}`, color: '#a3e635' }, { x: p.t[r.end], color: 'rgba(163,230,53,0.5)' }]) : []),
   ] : [];
-  drawChart($<HTMLCanvasElement>('res-chart'), series, { xLabel, yLabel, markers });
+  const hLines = mode === 'bar-force' && cur.trial.meta.lift ? [{ y: cur.trial.meta.lift.loadKg * 9.80665, label: 'weight of the bar', color: '#94a3b8' }] : [];
+  drawChart($<HTMLCanvasElement>('res-chart'), series, { xLabel, yLabel, markers, hLines, equal: mode === 'bar-path' });
   $('res-legend').innerHTML = legendHtml(series);
 }
 
@@ -143,6 +167,11 @@ function renderAll(): void {
   const opts = seriesOptions(p, o);
   sel.innerHTML = opts.map((x) => `<option value="${x.value}">${esc(x.label)}</option>`).join('');
   if (opts.some((x) => x.value === prev)) sel.value = prev;
+  for (const [id, def] of [['res-aa-x', 0], ['res-aa-y', 1]] as const) {
+    const s2 = $<HTMLSelectElement>(id), was = s2.value;
+    s2.innerHTML = o.angles.map((a) => `<option value="${a}">${esc(angleLabel(a))}</option>`).join('');
+    s2.value = o.angles.includes(was) ? was : o.angles[Math.min(def, o.angles.length - 1)] ?? '';
+  }
 
   // Summary table.
   const rows: string[] = [];
@@ -159,6 +188,7 @@ function renderAll(): void {
   $('res-table').querySelector('thead')!.innerHTML = '<tr><th scope="col">Measurement</th><th scope="col">Min</th><th scope="col">Max</th><th scope="col">Range</th><th scope="col">Peak rate</th><th scope="col">Peak acceleration</th></tr>';
   $('res-table').querySelector('tbody')!.innerHTML = rows.join('') || '<tr><td colspan="6">Select at least one angle or point under "Activity and measurements".</td></tr>';
 
+  renderLift();
   renderMode();
   renderReps();
   renderSymmetry();
@@ -167,6 +197,74 @@ function renderAll(): void {
   populateTeaching();
   renderTeaching();
 }
+
+const mean = (v: number[]) => { const a = v.filter(Number.isFinite); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN; };
+
+function liftRows(): { head: string[]; rows: (string | number)[][] } {
+  const r = liftReport?.reps ?? [], sys = r.some((x) => Number.isFinite(x.systemWork));
+  const head = ['lift', 'start_s', 'range_of_motion_m', 'duration_s', 'mean_velocity_m_s', 'mean_propulsive_velocity_m_s', 'peak_velocity_m_s', 'time_to_peak_velocity_s', 'peak_acceleration_m_s2', 'mean_force_N', 'peak_force_N', 'work_J', 'mean_power_W', 'peak_power_W', 'bar_path_deviation_m', 'lowering_time_s', ...(sys ? ['system_work_J', 'system_mean_power_W', 'system_peak_power_W'] : [])];
+  const rows = r.map((x, i) => [i + 1, cur!.processed.t[x.start], x.rom, x.duration, x.meanVelocity, x.meanPropulsiveVelocity, x.peakVelocity, x.timeToPeakVelocity, x.peakAcceleration, x.meanForce, x.peakForce, x.work, x.meanPower, x.peakPower, x.pathDeviation, x.loweringTime, ...(sys ? [x.systemWork, x.systemMeanPower, x.systemPeakPower] : [])]);
+  return { head, rows };
+}
+
+function liftCsv(): string {
+  if (!cur || !liftReport) return '';
+  const m = cur.trial.meta, { head, rows } = liftRows();
+  const n = (v: string | number) => (typeof v === 'number' ? (Number.isFinite(v) ? String(Number(v.toFixed(4))) : '') : v);
+  return [
+    `# Weight lifting report: ${LIFTS.find((l) => l.id === m.lift?.lift)?.label ?? 'lift'}; load_kg: ${m.lift?.loadKg ?? ''}; body_mass_kg: ${m.lift?.bodyMassKg ?? ''}`,
+    `# calibration: ${m.calibration.method}; sample rate_Hz: ${n(cur.processed.fs)}; cutoff_Hz: ${n(cur.processed.cutoff)}`,
+    '# force = m (g + a); power = force x velocity; work = integral of power over the lifting phase. Values describe the bar, not the lifter.',
+    '# mean propulsive velocity: mean over the part of the lift with bar acceleration above -g (Sanchez-Medina et al., 2010, doi:10.1055/s-0029-1242815)',
+    '# system_* columns use the combined centre of mass of lifter and bar from a segmental body model (de Leva, 1996).',
+    ...liftReport.warnings.map((w) => `# WARNING: ${w}`),
+    head.join(','), ...rows.map((r) => r.map(n).join(',')),
+  ].join('\n') + '\n';
+}
+
+function renderLift(): void {
+  liftReport = null;
+  const el = $('res-lift');
+  if (!cur) return;
+  const { trial, processed: p } = cur;
+  const lm = trial.meta.lift, u = p.lengthUnit;
+  const by = p.col.get(`bar_y_${u}`), bx = p.col.get(`bar_x_${u}`);
+  if (!lm && !by) { el.innerHTML = ''; return; }
+  if (!by || !bx) { el.innerHTML = '<p class="warnings">Weight lifting report not produced: the bar was not located in this trial.</p>'; return; }
+  if (u !== 'm') { el.innerHTML = '<p class="warnings">Weight lifting report not produced: the trial was not calibrated, so velocity, force, work and power cannot be given in real units.</p>'; return; }
+  if (!lm || !(lm.loadKg > 0)) { el.innerHTML = '<p class="warnings">Weight lifting report not produced: no load was entered for this trial.</p>'; return; }
+  const sysY = p.col.get('system_com_y_m');
+  const a = analyseLift({ fs: p.fs, x: bx, y: by, massKg: lm.loadKg, system: sysY && lm.bodyMassKg ? { y: sysY, massKg: lm.bodyMassKg + lm.loadKg } : null });
+  liftReport = a;
+  const lift = LIFTS.find((l) => l.id === lm.lift) ?? LIFTS[LIFTS.length - 1];
+  const warn = a.warnings.length ? `<ul class="warnings">${a.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
+  if (!a.reps.length) { el.innerHTML = `<h3>${esc(lift.label)}: weight lifting report</h3>${warn}`; return; }
+  const r = a.reps, sys = r.some((x) => Number.isFinite(x.systemWork));
+  const row = (x: (typeof r)[number], i: number) => `<tr><td>${i + 1}</td><td>${f(x.rom * 100, 1)}</td><td>${f(x.duration, 2)}</td><td><strong>${f(x.meanVelocity, 2)}</strong></td><td>${f(x.meanPropulsiveVelocity, 2)}</td><td>${f(x.peakVelocity, 2)}</td><td>${f(x.peakAcceleration, 1)}</td><td>${f(x.meanForce, 0)}</td><td>${f(x.peakForce, 0)}</td><td>${f(x.work, 0)}</td><td>${f(x.meanPower, 0)}</td><td>${f(x.peakPower, 0)}</td><td>${f(x.pathDeviation * 100, 1)}</td><td>${f(x.loweringTime, 2)}</td>${sys ? `<td>${f(x.systemWork, 0)}</td><td>${f(x.systemMeanPower, 0)}</td>` : ''}</tr>`;
+  const avg = (k: (x: (typeof r)[number]) => number, d: number, scale = 1) => f(mean(r.map(k)) * scale, d);
+  const best = Math.max(...r.map((x) => x.meanVelocity)), lastV = r[r.length - 1].meanVelocity;
+  const loss = r.length > 1 && best > 0 ? `Mean velocity fell ${f((100 * (best - lastV)) / best, 0)} % from the fastest lift to the last (velocity loss, a common marker of fatigue within a set). ` : '';
+  el.innerHTML = `<h3>${esc(lift.label)}: weight lifting report</h3>
+    <p class="muted">Load ${f(lm.loadKg, 1)} kg (${f(lm.loadKg / KG_PER_LB, 1)} lb)${lm.bodyMassKg ? `, body mass ${f(lm.bodyMassKg, 1)} kg` : ''}. ${r.length} lift${r.length > 1 ? 's' : ''} at ${f(p.fs)} Hz, filtered at ${f(p.cutoff)} Hz. ${loss}Total work on the bar: ${f(r.reduce((s2, x) => s2 + x.work, 0), 0)} J.</p>
+    ${warn}
+    <div class="table-wrap"><table><caption>Each lifting (upward) phase. Velocities in m/s, forces in N, work in J, power in W.</caption>
+    <thead><tr><th scope="col">Lift</th><th scope="col">Range (cm)</th><th scope="col">Time (s)</th><th scope="col">Mean velocity</th><th scope="col">Mean propulsive velocity</th><th scope="col">Peak velocity</th><th scope="col">Peak accel. (m/s²)</th><th scope="col">Mean force</th><th scope="col">Peak force</th><th scope="col">Work</th><th scope="col">Mean power</th><th scope="col">Peak power</th><th scope="col">Bar path drift (cm)</th><th scope="col">Lowering time (s)</th>${sys ? '<th scope="col">System work</th><th scope="col">System mean power</th>' : ''}</tr></thead><tbody>
+    ${r.map(row).join('')}
+    <tr><td>Mean</td><td>${avg((x) => x.rom, 1, 100)}</td><td>${avg((x) => x.duration, 2)}</td><td>${avg((x) => x.meanVelocity, 2)}</td><td>${avg((x) => x.meanPropulsiveVelocity, 2)}</td><td>${avg((x) => x.peakVelocity, 2)}</td><td>${avg((x) => x.peakAcceleration, 1)}</td><td>${avg((x) => x.meanForce, 0)}</td><td>${avg((x) => x.peakForce, 0)}</td><td>${avg((x) => x.work, 0)}</td><td>${avg((x) => x.meanPower, 0)}</td><td>${avg((x) => x.peakPower, 0)}</td><td>${avg((x) => x.pathDeviation, 1, 100)}</td><td>${avg((x) => x.loweringTime, 2)}</td>${sys ? `<td>${avg((x) => x.systemWork, 0)}</td><td>${avg((x) => x.systemMeanPower, 0)}</td>` : ''}</tr>
+    </tbody></table></div>
+    <h3>Read before using these numbers</h3>
+    <ul class="caveats">
+      <li>Force = mass × (g + acceleration), power = force × velocity, work = the sum of power over the lift. These describe the <strong>bar</strong>. The lifter also raises their own body, which is not included${sys ? ' except in the "system" columns, which use the combined centre of mass of lifter and bar from a segmental body model and are less certain' : ' (enter body mass to add a whole-system estimate)'}.</li>
+      <li>Mean velocity, range, time, work and mean power are the robust values. Peak acceleration, peak force and peak power come from differentiating position twice and depend strongly on frame rate and on the filter cutoff: treat them as approximate, and compare trials only at the same settings.</li>
+      <li>Accuracy depends on the calibration: every length, velocity and power value carries the same percentage error as the scale. A plate or reference object in the plane of the bar is better than body height.</li>
+      <li>A lift is counted from where the bar's upward speed passes 3 % of its peak (at least 0.02 m/s) to where it falls below that again. Mean propulsive velocity covers only the part with bar acceleration above -g (Sanchez-Medina et al., 2010).</li>
+      <li>This mode has been checked against synthetic lifts with known answers, not yet against a linear position transducer or force plate on real lifts.</li>
+    </ul>
+    <div class="row"><button id="btn-lift-csv">Download the lifting report (CSV)</button></div>`;
+  $('btn-lift-csv').addEventListener('click', () => cur && download(textBlob(liftCsv(), 'text/csv'), `${cur.name}-lifting-report.csv`));
+}
+
+const liftLines = (): string[] => (liftReport?.reps.length ? liftCsv().trim().split('\n').map((l) => `lifting: ${l.replace(/^# /, '')}`) : []);
 
 function renderMode(): void {
   modeReport = null;
@@ -338,6 +436,8 @@ export function renderTeaching(): void {
 
 export function initResults(): void {
   $('res-series').addEventListener('change', renderChart);
+  $('res-aa-x').addEventListener('change', renderChart);
+  $('res-aa-y').addEventListener('change', renderChart);
   $('btn-reprocess').addEventListener('click', () => {
     const v = Number($<HTMLInputElement>('cutoff').value);
     if (!(v > 0)) { say('Enter a cutoff frequency above 0 Hz.'); return; }
@@ -358,7 +458,7 @@ export function initResults(): void {
   for (const id of ['teach-signal', 'teach-decimate']) $(id).addEventListener('change', renderTeaching);
   $('teach-cutoff').addEventListener('input', renderTeaching);
   $('notes').addEventListener('input', () => { if (cur) cur.trial.meta.notes = $<HTMLTextAreaElement>('notes').value; });
-  $('btn-csv').addEventListener('click', () => cur && download(textBlob(processedCsv(cur.trial, cur.processed, cur.opts, $<HTMLInputElement>('chk-csv-meta').checked, modeLines()), 'text/csv'), `${cur.name}-kinematics.csv`));
+  $('btn-csv').addEventListener('click', () => cur && download(textBlob(processedCsv(cur.trial, cur.processed, cur.opts, $<HTMLInputElement>('chk-csv-meta').checked, [...modeLines(), ...liftLines()]), 'text/csv'), `${cur.name}-kinematics.csv`));
   $('btn-raw').addEventListener('click', () => cur && download(textBlob(landmarksCsv(cur.trial), 'text/csv'), `${cur.name}-landmarks.csv`));
   $('btn-session').addEventListener('click', () => cur && download(textBlob(sessionJson(cur.trial), 'application/json'), `${cur.name}-session.json`));
   $('btn-video-dl').addEventListener('click', () => cur?.video && download(cur.video, `${cur.name}.${cur.videoExt}`));

@@ -18,6 +18,10 @@ export interface ChartOptions {
   markers?: { x: number; label?: string; color?: string }[];
   /** Horizontal reference lines. */
   hLines?: { y: number; label?: string; color?: string }[];
+  /** Single highlighted points (e.g. the current position on an angle-angle plot). */
+  dots?: { x: number; y: number; color?: string }[];
+  /** Use the same scale on both axes (for paths in space). */
+  equal?: boolean;
 }
 
 export const PALETTE = ['#f59e0b', '#22d3ee', '#a78bfa', '#4ade80', '#fb7185', '#facc15', '#60a5fa', '#f472b6'];
@@ -68,6 +72,12 @@ export function drawChart(canvas: HTMLCanvasElement, series: Series[], o: ChartO
   if (x1 - x0 < 1e-9) x1 = x0 + 1;
   const pad = 0.06 * (y1 - y0);
   y0 -= pad; y1 += pad;
+  if (o.equal) {
+    // Widen whichever axis is too short so one unit is the same length in x and y.
+    const sx = (x1 - x0) / pw, sy = (y1 - y0) / ph;
+    if (sx < sy) { const c = (x0 + x1) / 2; x0 = c - (sy * pw) / 2; x1 = c + (sy * pw) / 2; }
+    else { const c = (y0 + y1) / 2; y0 = c - (sx * ph) / 2; y1 = c + (sx * ph) / 2; }
+  }
   const X = (x: number) => m.l + ((x - x0) / (x1 - x0)) * pw;
   const Y = (y: number) => m.t + (1 - (y - y0) / (y1 - y0)) * ph;
 
@@ -135,6 +145,11 @@ export function drawChart(canvas: HTMLCanvasElement, series: Series[], o: ChartO
       pen = true;
     }
     ctx.stroke();
+  }
+  for (const d of o.dots ?? []) {
+    if (!Number.isFinite(d.x) || !Number.isFinite(d.y)) continue;
+    ctx.fillStyle = d.color ?? fg;
+    ctx.beginPath(); ctx.arc(X(d.x), Y(d.y), 4.5, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
   ctx.setLineDash([]);
