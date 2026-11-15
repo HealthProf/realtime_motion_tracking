@@ -1,0 +1,37 @@
+{
+  "format": "realtime-motion-tracking-summary",
+  "version": 1,
+  "app_version": "0.2.0",
+  "trial_id": "00000000-0000-4000-8000-000000000001",
+  "recorded_at": "2026-01-01T00:00:00.000Z",
+  "duration_s": 4,
+  "preset": "free",
+  "context": null,
+  "capture": {
+    "source": "synthetic",
+    "model": "synthetic",
+    "nominal_fps": 60,
+    "sample_rate_hz": 60,
+    "view": "side",
+    "side": null,
+    "mirrored": false,
+    "calibration": {
+      "method": "reference-length",
+      "unit": "m",
+      "scale": 0.003333333
+    },
+    "cutoff_hz": 6,
+    "min_visibility": 0.5,
+    "angle_convention": "anatomical",
+    "warnings": []
+  },
+  "inputs": {
+    "inseam_cm": null,
+    "saddle_cm": null,
+    "speed_kmh": null
+  },
+  "report": null,
+  "reps": null,
+  "lift": null,
+  "jump": null
+}

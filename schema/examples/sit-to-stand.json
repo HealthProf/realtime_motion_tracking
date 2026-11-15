@@ -1,0 +1,67 @@
+{
+  "format": "realtime-motion-tracking-summary",
+  "version": 1,
+  "app_version": "0.2.0",
+  "trial_id": "00000000-0000-4000-8000-000000000003",
+  "recorded_at": "2026-01-01T00:00:00.000Z",
+  "duration_s": 6,
+  "preset": "sit-to-stand",
+  "context": null,
+  "capture": {
+    "source": "synthetic",
+    "model": "synthetic",
+    "nominal_fps": 60,
+    "sample_rate_hz": 60,
+    "view": "side",
+    "side": "left",
+    "mirrored": false,
+    "calibration": {
+      "method": "reference-length",
+      "unit": "m",
+      "scale": 0.003333333
+    },
+    "cutoff_hz": 6,
+    "min_visibility": 0.5,
+    "angle_convention": "anatomical",
+    "warnings": []
+  },
+  "inputs": {
+    "inseam_cm": null,
+    "saddle_cm": null,
+    "speed_kmh": null
+  },
+  "report": null,
+  "reps": {
+    "joint": "knee",
+    "side": "left",
+    "unit": "deg",
+    "velocity_unit": "deg/s",
+    "items": [
+      {
+        "n": 1,
+        "start_s": 0,
+        "peak_s": 0,
+        "end_s": 1.5,
+        "start_value": 9.999943,
+        "peak_value": 9.999943,
+        "rom": 49.99994,
+        "duration_s": 1.5,
+        "peak_velocity": 104.7002
+      },
+      {
+        "n": 2,
+        "start_s": 1.5,
+        "peak_s": 3,
+        "end_s": 4.5,
+        "start_value": 109.9998,
+        "peak_value": 10.00003,
+        "rom": 99.9998,
+        "duration_s": 3,
+        "peak_velocity": 104.7002
+      }
+    ],
+    "symmetry_index_pct": null
+  },
+  "lift": null,
+  "jump": null
+}

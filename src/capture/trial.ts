@@ -41,10 +41,22 @@ export interface Mark {
 }
 
 export interface Trial {
+  /** Random UUID made when the trial is recorded (or loaded from a session file, which does not store it). Held in memory only. */
+  id: string;
   meta: TrialMeta;
   /** Frame times are seconds from trial start. */
   frames: PoseFrame[];
   marks: Mark[];
+}
+
+/** A random version 4 UUID. `crypto.randomUUID` needs a secure context, so fall back to getRandomValues. */
+export function newTrialId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 const q = (v: number, step: number) => Math.round(v / step) * step;
@@ -71,7 +83,7 @@ export class TrialRecorder {
   recording = false;
 
   start(meta: TrialMeta): void {
-    this.trial = { meta, frames: [], marks: [] };
+    this.trial = { id: newTrialId(), meta, frames: [], marks: [] };
     this.t0 = NaN;
     this.recording = true;
   }

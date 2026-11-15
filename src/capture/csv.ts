@@ -2,7 +2,7 @@
 import { ANGLE_BY_ID } from '../measure/definitions';
 import { LANDMARK_NAMES } from '../pose/landmarks';
 import type { Processed, ProcessOptions } from './process';
-import type { Trial } from './trial';
+import { newTrialId, type Trial } from './trial';
 
 const num = (v: number, digits = 5) => (Number.isFinite(v) ? String(Number(v.toFixed(digits))) : '');
 const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
@@ -81,6 +81,7 @@ export function parseSession(text: string): Trial {
   if (!Array.isArray(d.frames) || !d.meta?.calibration) throw new Error('The session file is incomplete.');
   const unpack = (l: number[][] | null) => (l ? l.map(([x, y, z, v]) => ({ x, y, z, v })) : null);
   return {
+    id: newTrialId(),
     meta: d.meta,
     marks: Array.isArray(d.marks) ? d.marks : [],
     frames: d.frames.map((f: any) => ({ t: f.t, w: f.w, h: f.h, lm: unpack(f.lm), world: unpack(f.world), ...(f.bar ? { bar: f.bar } : {}) })),

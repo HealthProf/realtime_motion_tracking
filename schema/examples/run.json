@@ -1,0 +1,225 @@
+{
+  "format": "realtime-motion-tracking-summary",
+  "version": 1,
+  "app_version": "0.2.0",
+  "trial_id": "00000000-0000-4000-8000-000000000008",
+  "recorded_at": "2026-01-01T00:00:00.000Z",
+  "duration_s": 12,
+  "preset": "run",
+  "context": null,
+  "capture": {
+    "source": "synthetic",
+    "model": "synthetic",
+    "nominal_fps": 120,
+    "sample_rate_hz": 120,
+    "view": "side",
+    "side": "left",
+    "mirrored": false,
+    "calibration": {
+      "method": "reference-length",
+      "unit": "m",
+      "scale": 0.003333333
+    },
+    "cutoff_hz": 8,
+    "min_visibility": 0.5,
+    "angle_convention": "anatomical",
+    "warnings": []
+  },
+  "inputs": {
+    "inseam_cm": null,
+    "saddle_cm": null,
+    "speed_kmh": 10
+  },
+  "report": {
+    "mode": "run",
+    "view": "side",
+    "cycles": 16,
+    "rows": [
+      {
+        "id": "step_rate",
+        "label": "Step rate",
+        "unit": "steps/min",
+        "mean": 171.4286,
+        "sd": 5.883853e-14,
+        "n": 15,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Twice the stride rate of the tracked leg (assumes left and right steps are alike)."
+      },
+      {
+        "id": "contact",
+        "label": "Ground contact time",
+        "unit": "ms",
+        "mean": 250,
+        "sd": 0,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Resolved to about +-8 ms (one frame)."
+      },
+      {
+        "id": "duty",
+        "label": "Duty factor (contact / stride)",
+        "unit": "%",
+        "mean": 35.71429,
+        "sd": null,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "flight",
+        "label": "Flight time per step (estimated)",
+        "unit": "ms",
+        "mean": 100,
+        "sd": null,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Half the stride time minus contact time; assumes symmetry."
+      },
+      {
+        "id": "fsa",
+        "label": "Foot-strike angle",
+        "unit": "deg",
+        "mean": 9.980165,
+        "sd": 4.053053e-14,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Classified as rearfoot strike (rearfoot above 8 deg, forefoot below -1.6 deg; thresholds from 9 midfoot strikes in 20 runners). Foot-flat is taken from mid-stance here, not from standing as in the source."
+      },
+      {
+        "id": "shank",
+        "label": "Shank angle at contact",
+        "unit": "deg",
+        "mean": -3.038967,
+        "sd": 5.680432e-14,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Positive = ankle ahead of the knee (\"extended tibia\"). The source describes vertical or flexed as preferable for impact-related injuries, without a cutoff."
+      },
+      {
+        "id": "knee_ic",
+        "label": "Knee flexion at contact",
+        "unit": "deg",
+        "mean": 27.80739,
+        "sd": 8.097278e-14,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "knee_peak",
+        "label": "Peak knee flexion in stance",
+        "unit": "deg",
+        "mean": 47.60278,
+        "sd": 1.092173e-13,
+        "n": 16,
+        "band": 5,
+        "status": "in",
+        "ref": {
+          "id": "runKneePeak",
+          "unit": "deg",
+          "low": 40,
+          "high": null,
+          "basis": "Typical peak stance knee flexion approaches about 45 deg; under 40 deg has been associated with some patellofemoral pain subgroups. The source states that no injury cutoffs exist.",
+          "citation": "Souza (2016) Phys Med Rehabil Clin N Am 27(1):217-36",
+          "doi": "10.1016/j.pmr.2015.08.006"
+        },
+        "note": null
+      },
+      {
+        "id": "ankle_ahead",
+        "label": "Ankle ahead of the hip at contact",
+        "unit": "% of leg length",
+        "mean": 18.29772,
+        "sd": 2.792894e-14,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Larger values indicate reaching (overstriding). The source uses a yes/no check of whether a vertical line from the ankle falls within the pelvis."
+      },
+      {
+        "id": "ankle_com",
+        "label": "Ankle ahead of the centre of mass at contact",
+        "unit": "% of leg length",
+        "mean": 9.331135,
+        "sd": 2.929284e-14,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Centre of mass is a body-model estimate."
+      },
+      {
+        "id": "thigh_to",
+        "label": "Thigh behind vertical at toe-off",
+        "unit": "deg",
+        "mean": -23.08992,
+        "sd": 1.502008e-12,
+        "n": 16,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "A surrogate for hip extension in late stance. No target: the source says the optimal amount is unknown."
+      },
+      {
+        "id": "trunk",
+        "label": "Forward trunk lean",
+        "unit": "deg",
+        "mean": 8.000012,
+        "sd": 0.00000830059,
+        "n": 1441,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "osc",
+        "label": "Vertical movement of the centre of mass",
+        "unit": "cm",
+        "mean": 4.707644,
+        "sd": 3.378037e-14,
+        "n": 15,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "step_length",
+        "label": "Step length (from the speed you entered)",
+        "unit": "m",
+        "mean": 0.9722222,
+        "sd": null,
+        "n": 1,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      }
+    ],
+    "caveats": [
+      "Keypoints are model estimates. Published 2D joint-angle errors for this type of model are about 5 deg or more, and the foot keypoints are among the least certain.",
+      "Foot contact and toe-off are detected from foot position relative to the pelvis, a method validated for walking (Zeni et al., 2008), not running. It is unvalidated on real runners in this tool.",
+      "The source framework states that no cutoffs for abnormal running kinematics exist, and that changing running form in uninjured runners is not evidence-based. Treat the options as things to explore, not corrections.",
+      "This tool cannot assess pain or injury."
+    ]
+  },
+  "reps": null,
+  "lift": null,
+  "jump": null
+}

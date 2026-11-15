@@ -12,7 +12,8 @@ device: no video or data is uploaded.
 - Calibrates to metres from a reference object, a weight plate, or (less accurately) standing height.
 - Records trials and re-filters them without lag (zero-phase Butterworth) before export.
 - Exports a kinematics CSV with a methods header, a raw landmark CSV, a reloadable session file,
-  PNG screenshots of key moments, and a local video with the overlays.
+  a small versioned summary JSON of the computed results (no landmarks), PNG screenshots of key
+  moments, and a local video with the overlays.
 - Instant replay of the last 10 to 20 seconds with measurements intact.
 - Delayed view: the picture and measurements from 5 to 60 seconds ago (adjustable), so a person can
   perform a movement and then turn to the screen and watch it. A small live picture stays in the corner.
@@ -73,6 +74,15 @@ The smoke test can also check frame-by-frame video analysis: set `TEST_VIDEO` to
 `TEST_VIDEO_FRAMES` to its frame count (needs `npm run assets`).
 
 Append `?demo=squat`, `?demo=jump`, `?demo=raise`, `?demo=cycle`, `?demo=run` or `?demo=lift` to the URL to start the synthetic demo directly.
+
+A link can pre-fill the page. All parameters are optional and are checked and length-limited before use:
+`preset` (a preset id such as `bike`, `lift`, `squat`), `ref`, `subject` and `note` (shown on the page and copied
+into the summary export), `lift`, `load_kg` and `body_mass_kg` (weight lifting inputs), and `inseam_cm` and
+`saddle_cm` (bike inputs). For example `?preset=bike&ref=my-app:fit:42&saddle_cm=74.5`.
+
+The summary file format is described by `schema/summary.v1.schema.json`, with one example per preset in
+`schema/examples/`. A test validates both, and the examples can be regenerated with
+`WRITE_EXAMPLES=1 npx vitest run tests/unit/summary.test.ts`.
 
 ## Deploying to GitHub Pages
 

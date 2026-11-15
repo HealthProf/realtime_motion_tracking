@@ -1,0 +1,212 @@
+{
+  "format": "realtime-motion-tracking-summary",
+  "version": 1,
+  "app_version": "0.2.0",
+  "trial_id": "00000000-0000-4000-8000-000000000007",
+  "recorded_at": "2026-01-01T00:00:00.000Z",
+  "duration_s": 12,
+  "preset": "bike",
+  "context": {
+    "ref": "swimcoach:bikefit:7c1d0e7a",
+    "subject": "athlete-2",
+    "note": "after raising saddle 5 mm"
+  },
+  "capture": {
+    "source": "synthetic",
+    "model": "synthetic",
+    "nominal_fps": 60,
+    "sample_rate_hz": 60,
+    "view": "side",
+    "side": "left",
+    "mirrored": false,
+    "calibration": {
+      "method": "reference-length",
+      "unit": "m",
+      "scale": 0.003333333
+    },
+    "cutoff_hz": 6,
+    "min_visibility": 0.5,
+    "angle_convention": "anatomical",
+    "warnings": []
+  },
+  "inputs": {
+    "inseam_cm": 84,
+    "saddle_cm": 74.5,
+    "speed_kmh": null
+  },
+  "report": {
+    "mode": "bike",
+    "view": "side",
+    "cycles": 17,
+    "rows": [
+      {
+        "id": "cadence",
+        "label": "Cadence",
+        "unit": "rev/min",
+        "mean": 90,
+        "sd": 2.38329e-7,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "knee_bdc",
+        "label": "Knee flexion at the bottom of the stroke",
+        "unit": "deg",
+        "mean": 46.82585,
+        "sd": 0.000005246098,
+        "n": 18,
+        "band": 5,
+        "status": "high",
+        "ref": {
+          "id": "bikeKneeBdc",
+          "unit": "deg",
+          "low": 30,
+          "high": 40,
+          "basis": "Knee flexion measured dynamically (2D video) while pedalling; well-trained male road cyclists.",
+          "citation": "Ferrer-Roca et al. (2012) J Strength Cond Res 26(11):3025-9",
+          "doi": "10.1519/JSC.0b013e318245c09d"
+        },
+        "note": null
+      },
+      {
+        "id": "knee_min",
+        "label": "Smallest knee flexion in the stroke",
+        "unit": "deg",
+        "mean": 45.64098,
+        "sd": 0.00001795453,
+        "n": 18,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Usually occurs just before the bottom of the stroke."
+      },
+      {
+        "id": "knee_max",
+        "label": "Largest knee flexion (top of the stroke)",
+        "unit": "deg",
+        "mean": 116.8932,
+        "sd": 2.637299e-7,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "hip_closed",
+        "label": "Most closed hip (largest trunk-thigh flexion)",
+        "unit": "deg",
+        "mean": 118.831,
+        "sd": 2.127897e-7,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "ankle_range",
+        "label": "Ankle movement through the stroke",
+        "unit": "deg",
+        "mean": 36.84374,
+        "sd": 4.94977e-7,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "trunk",
+        "label": "Trunk angle above horizontal",
+        "unit": "deg",
+        "mean": 45,
+        "sd": 0,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Mid-hip to mid-shoulder line. Lower is a more aggressive position."
+      },
+      {
+        "id": "shoulder",
+        "label": "Arm-trunk angle",
+        "unit": "deg",
+        "mean": 79.99995,
+        "sd": 0,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "elbow",
+        "label": "Elbow flexion",
+        "unit": "deg",
+        "mean": 20.00032,
+        "sd": 3.662053e-15,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": null
+      },
+      {
+        "id": "hip_rock",
+        "label": "Vertical hip movement per revolution",
+        "unit": "% of thigh length",
+        "mean": 0,
+        "sd": 0,
+        "n": 17,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Includes keypoint jitter. Compare between trials rather than reading the absolute value."
+      },
+      {
+        "id": "kops",
+        "label": "Knee ahead of the forefoot, crank forward",
+        "unit": "% of thigh length",
+        "mean": -12.16791,
+        "sd": 0.00006211199,
+        "n": 18,
+        "band": null,
+        "status": "none",
+        "ref": null,
+        "note": "Descriptive only: \"knee over pedal spindle\" is a convention with weak evidence as a fit target."
+      },
+      {
+        "id": "saddle",
+        "label": "Saddle height you entered",
+        "unit": "% of inseam",
+        "mean": 88.69048,
+        "sd": null,
+        "n": 1,
+        "band": 0,
+        "status": "low",
+        "ref": {
+          "id": "saddleInseam",
+          "unit": "% of inseam",
+          "low": 106,
+          "high": 109,
+          "basis": "Conventional saddle-height guideline. The same study found it often fails to produce a 30-40 deg knee angle.",
+          "citation": "Ferrer-Roca et al. (2012) J Strength Cond Res 26(11):3025-9",
+          "doi": "10.1519/JSC.0b013e318245c09d"
+        },
+        "note": "From your tape measurements, not from the camera."
+      }
+    ],
+    "caveats": [
+      "Keypoints are model estimates. Published 2D joint-angle errors for this type of model are about 5 deg or more, and averaging cycles does not remove a consistent offset.",
+      "This tool has not been validated against a professional fitting or gait-analysis system. It cannot assess pain or injury.",
+      "The reference range comes from well-trained male road cyclists; it may not transfer to other riders or bike types."
+    ]
+  },
+  "reps": null,
+  "lift": null,
+  "jump": null
+}

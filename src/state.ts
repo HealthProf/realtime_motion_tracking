@@ -4,6 +4,7 @@ import { defaultCalibration, type Calibration } from './kinematics/calibration';
 import type { Convention } from './measure/definitions';
 import type { PointId } from './pose/landmarks';
 import type { SideMode } from './presets/presets';
+import type { SummaryContext } from './capture/summary';
 import type { Layers } from './render/overlay';
 import type { ModelTier } from './types';
 
@@ -50,6 +51,9 @@ export const settings = {
   delayOn: false,
   delaySeconds: 10,
 };
+
+/** Text from the link that opened the app (`?ref=`, `?subject=`, `?note=`). Copied into the summary export unchanged. */
+export const linked: { context: SummaryContext | null } = { context: null };
 
 export const layers: Layers = {
   videoOpacity: 1, skeleton: true, labels: true, trails: true, com: true, axes: false,

@@ -1,0 +1,111 @@
+{
+  "format": "realtime-motion-tracking-summary",
+  "version": 1,
+  "app_version": "0.2.0",
+  "trial_id": "00000000-0000-4000-8000-000000000005",
+  "recorded_at": "2026-01-01T00:00:00.000Z",
+  "duration_s": 4,
+  "preset": "gait",
+  "context": null,
+  "capture": {
+    "source": "synthetic",
+    "model": "synthetic",
+    "nominal_fps": 60,
+    "sample_rate_hz": 60,
+    "view": "side",
+    "side": "left",
+    "mirrored": false,
+    "calibration": {
+      "method": "reference-length",
+      "unit": "m",
+      "scale": 0.003333333
+    },
+    "cutoff_hz": 6,
+    "min_visibility": 0.5,
+    "angle_convention": "anatomical",
+    "warnings": []
+  },
+  "inputs": {
+    "inseam_cm": null,
+    "saddle_cm": null,
+    "speed_kmh": null
+  },
+  "report": null,
+  "reps": {
+    "joint": "knee",
+    "side": "left",
+    "unit": "deg",
+    "velocity_unit": "deg/s",
+    "items": [
+      {
+        "n": 1,
+        "start_s": 0,
+        "peak_s": 0,
+        "end_s": 0.45,
+        "start_value": 22.22451,
+        "peak_value": 22.22451,
+        "rom": 43.30617,
+        "duration_s": 0.45,
+        "peak_velocity": 296.8049
+      },
+      {
+        "n": 2,
+        "start_s": 0.45,
+        "peak_s": 0.7166667,
+        "end_s": 1.15,
+        "start_value": 108.8368,
+        "peak_value": 28.53136,
+        "rom": 80.30548,
+        "duration_s": 0.7,
+        "peak_velocity": 526.0518
+      },
+      {
+        "n": 3,
+        "start_s": 1.15,
+        "peak_s": 1.416667,
+        "end_s": 1.85,
+        "start_value": 108.8368,
+        "peak_value": 28.53136,
+        "rom": 80.30548,
+        "duration_s": 0.7,
+        "peak_velocity": 526.0518
+      },
+      {
+        "n": 4,
+        "start_s": 1.85,
+        "peak_s": 2.116667,
+        "end_s": 2.55,
+        "start_value": 108.8368,
+        "peak_value": 28.53136,
+        "rom": 80.30548,
+        "duration_s": 0.7,
+        "peak_velocity": 526.0518
+      },
+      {
+        "n": 5,
+        "start_s": 2.55,
+        "peak_s": 2.816667,
+        "end_s": 3.25,
+        "start_value": 108.8368,
+        "peak_value": 28.53136,
+        "rom": 80.30548,
+        "duration_s": 0.7,
+        "peak_velocity": 526.0518
+      },
+      {
+        "n": 6,
+        "start_s": 3.25,
+        "peak_s": 3.516667,
+        "end_s": 3.95,
+        "start_value": 108.8368,
+        "peak_value": 28.53136,
+        "rom": 80.16046,
+        "duration_s": 0.7,
+        "peak_velocity": 526.0518
+      }
+    ],
+    "symmetry_index_pct": null
+  },
+  "lift": null,
+  "jump": null
+}

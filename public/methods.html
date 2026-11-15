@@ -147,6 +147,19 @@
 <p><strong>How far to trust them.</strong> Range, time, mean velocity, work and mean power are robust. Peak acceleration, peak force and peak power come from differentiating twice and depend on frame rate and filter cutoff. At 30 frames per second fast lifts (cleans, snatches) are under-sampled and peaks are underestimated; the app warns when this applies. Every value carries the percentage error of the calibration.</p>
 <p><strong>Validation status.</strong> The calculations are checked against synthetic lifts with known answers, and the plate tracker against synthetic images and a synthetic barbell scene. The mode has not yet been compared with a linear position transducer or force plate on real lifts, and the tracker has not been tested on real gym footage.</p>
 
+<h2>Summary file</h2>
+<p>The "Summary (.json)" download holds the computed results of one trial in a small, versioned file for other programs to read. Unlike the session file it has no landmarks and no video, so it holds nothing that identifies a person beyond what was typed in. It is built from the same values shown in the results panel; it adds no calculation of its own.</p>
+<ul>
+<li><strong>Header.</strong> <code>format</code> is <code>realtime-motion-tracking-summary</code> and <code>version</code> is 1. <code>app_version</code>, <code>trial_id</code> (a random UUID made when the trial is recorded; a trial loaded from a session file gets a new one), <code>recorded_at</code> (ISO 8601, UTC), <code>duration_s</code> and <code>preset</code> follow.</li>
+<li><strong>One result block.</strong> Exactly one of <code>report</code> (bike fit and running), <code>reps</code> (squat, sit-to-stand, gait, overhead reach), <code>lift</code> or <code>jump</code> is filled, following the activity; the others are <code>null</code>. For free analysis, or when the report could not be produced, all four are <code>null</code> and <code>capture.warnings</code> says why.</li>
+<li><strong>Missing values are <code>null</code>,</strong> never NaN. A metric the app withheld has <code>mean: null</code> and <code>status: "withheld"</code>.</li>
+<li><strong>Times are seconds from the start of the trial,</strong> taken from the measured frame times, not row numbers.</li>
+<li><strong>Units are in the field name</strong> (<code>rom_m</code>, <code>mean_power_w</code>) <strong>or in a <code>unit</code> field</strong> beside the value. A metric is identified by its <code>id</code> together with its <code>unit</code>; labels are for people and may be reworded.</li>
+<li><strong>Context.</strong> The link parameters <code>ref</code>, <code>subject</code> and <code>note</code> are copied into <code>context</code> unchanged and never interpreted. They are shown on the page before recording, because they come from a link.</li>
+<li><strong>Lifting.</strong> Each lift has a <code>bar_source</code>: <code>plate</code> if the bar was followed on the plate, <code>hands</code> if it was estimated from the wrists. Force, work and power describe the bar, as in the lifting report.</li>
+</ul>
+<p><strong>Stability promise.</strong> Adding a field, a metric <code>id</code>, a preset or a lift does not change <code>version</code>. Renaming or removing a field, changing a unit, or changing what an existing metric <code>id</code> measures raises <code>version</code>. A reader must ignore fields it does not know and refuse a <code>version</code> higher than it supports. The JSON Schema (<code>schema/summary.v1.schema.json</code>) and one example per activity are in the repository and are checked by the test suite.</p>
+
 <h2>What published comparisons report</h2>
 <p>Based on articles retrieved from PubMed, studies comparing this family of models with marker-based motion capture report results that depend strongly on the joint, the task and the camera view:</p>
 <ul>

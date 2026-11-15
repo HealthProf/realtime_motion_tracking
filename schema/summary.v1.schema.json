@@ -1,0 +1,753 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HealthProf/realtime_motion_tracking/schema/summary.v1.schema.json",
+  "title": "Real-Time Motion Lab summary, version 1",
+  "description": "The computed results of one trial. Holds no landmarks and no video. Missing values are null, never NaN. Times are seconds from the start of the trial. Readers must ignore fields they do not know and refuse a version higher than they support, so this schema does not forbid extra properties.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "realtime-motion-tracking-summary"
+    },
+    "version": {
+      "const": 1
+    },
+    "app_version": {
+      "type": "string"
+    },
+    "trial_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Generated once when the trial is recorded. A trial loaded from a session file gets a new one."
+    },
+    "recorded_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "ISO 8601, UTC."
+    },
+    "duration_s": {
+      "$ref": "#/$defs/nullableNumber"
+    },
+    "preset": {
+      "type": "string",
+      "description": "Preset id, e.g. bike, lift, squat."
+    },
+    "context": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/context"
+        }
+      ]
+    },
+    "capture": {
+      "$ref": "#/$defs/capture"
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
+    },
+    "report": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/report"
+        }
+      ]
+    },
+    "reps": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/reps"
+        }
+      ]
+    },
+    "lift": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/lift"
+        }
+      ]
+    },
+    "jump": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/jump"
+        }
+      ]
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "app_version",
+    "trial_id",
+    "recorded_at",
+    "duration_s",
+    "preset",
+    "context",
+    "capture",
+    "inputs",
+    "report",
+    "reps",
+    "lift",
+    "jump"
+  ],
+  "oneOf": [
+    {
+      "description": "At most one of report, reps, lift, jump is filled, following the preset's analysis. None is filled for free analysis or when the analysis could not be produced (see capture.warnings).",
+      "properties": {
+        "report": {
+          "type": "null"
+        },
+        "reps": {
+          "type": "null"
+        },
+        "lift": {
+          "type": "null"
+        },
+        "jump": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "report": {
+          "type": "object"
+        },
+        "reps": {
+          "type": "null"
+        },
+        "lift": {
+          "type": "null"
+        },
+        "jump": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "report": {
+          "type": "null"
+        },
+        "reps": {
+          "type": "object"
+        },
+        "lift": {
+          "type": "null"
+        },
+        "jump": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "report": {
+          "type": "null"
+        },
+        "reps": {
+          "type": "null"
+        },
+        "lift": {
+          "type": "object"
+        },
+        "jump": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "report": {
+          "type": "null"
+        },
+        "reps": {
+          "type": "null"
+        },
+        "lift": {
+          "type": "null"
+        },
+        "jump": {
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "nullableNumber": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "A finite number, or null when the value is missing or was withheld. Never NaN or Infinity."
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "description": "Text from the link that opened the app, copied through unchanged. Only the keys that were supplied are present. Never interpreted."
+    },
+    "capture": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "enum": [
+            "camera",
+            "synthetic",
+            "video"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "description": "Pose model tier: lite, full, heavy, or synthetic."
+        },
+        "nominal_fps": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "Frame rate the camera or file reported."
+        },
+        "sample_rate_hz": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "Measured sample rate of the processed series."
+        },
+        "view": {
+          "enum": [
+            "side",
+            "front",
+            "oblique",
+            "unknown"
+          ],
+          "description": "Camera view estimated from the model's 3D output."
+        },
+        "side": {
+          "enum": [
+            "left",
+            "right",
+            "both",
+            null
+          ]
+        },
+        "mirrored": {
+          "type": "boolean"
+        },
+        "calibration": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "enum": [
+                "none",
+                "reference-length",
+                "subject-height",
+                "plate-diameter"
+              ]
+            },
+            "unit": {
+              "enum": [
+                "m",
+                "px"
+              ]
+            },
+            "scale": {
+              "$ref": "#/$defs/nullableNumber",
+              "description": "Length units per image pixel."
+            }
+          },
+          "required": [
+            "method",
+            "unit",
+            "scale"
+          ]
+        },
+        "cutoff_hz": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "Low-pass cutoff actually used."
+        },
+        "min_visibility": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "Landmarks below this model confidence were treated as missing."
+        },
+        "angle_convention": {
+          "type": "string"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "source",
+        "model",
+        "nominal_fps",
+        "sample_rate_hz",
+        "view",
+        "side",
+        "mirrored",
+        "calibration",
+        "cutoff_hz",
+        "min_visibility",
+        "angle_convention",
+        "warnings"
+      ]
+    },
+    "inputs": {
+      "type": "object",
+      "properties": {
+        "inseam_cm": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "saddle_cm": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "speed_kmh": {
+          "$ref": "#/$defs/nullableNumber"
+        }
+      },
+      "required": [
+        "inseam_cm",
+        "saddle_cm",
+        "speed_kmh"
+      ],
+      "description": "Typed measurements, null when not given."
+    },
+    "reference": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "low": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "high": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "basis": {
+          "type": "string"
+        },
+        "citation": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "unit",
+        "low",
+        "high",
+        "basis",
+        "citation",
+        "doi"
+      ],
+      "description": "Published reference range for a metric. A null bound means open-ended."
+    },
+    "row": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "mean": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "sd": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "band": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "Assumed measurement uncertainty of the tool, in the metric's unit."
+        },
+        "status": {
+          "enum": [
+            "in",
+            "borderline-low",
+            "borderline-high",
+            "low",
+            "high",
+            "none",
+            "withheld"
+          ]
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/reference"
+            }
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "unit",
+        "mean",
+        "sd",
+        "n",
+        "band",
+        "status",
+        "ref",
+        "note"
+      ],
+      "description": "One metric. `id` plus `unit` identifies it; `label` is for people and may change."
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "bike",
+            "run"
+          ]
+        },
+        "view": {
+          "enum": [
+            "side",
+            "front-back"
+          ]
+        },
+        "cycles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/row"
+          }
+        },
+        "caveats": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "mode",
+        "view",
+        "cycles",
+        "rows",
+        "caveats"
+      ]
+    },
+    "rep": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "end_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "start_value": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_value": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "rom": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "duration_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_velocity": {
+          "$ref": "#/$defs/nullableNumber"
+        }
+      },
+      "required": [
+        "n",
+        "start_s",
+        "peak_s",
+        "end_s",
+        "start_value",
+        "peak_value",
+        "rom",
+        "duration_s",
+        "peak_velocity"
+      ],
+      "description": "Times are seconds from trial start."
+    },
+    "reps": {
+      "type": "object",
+      "properties": {
+        "joint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "side": {
+          "enum": [
+            "left",
+            "right",
+            null
+          ]
+        },
+        "unit": {
+          "const": "deg"
+        },
+        "velocity_unit": {
+          "const": "deg/s"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rep"
+          }
+        },
+        "symmetry_index_pct": {
+          "$ref": "#/$defs/nullableNumber",
+          "description": "Symmetry index of range of motion, 100 x (L - R) / mean(L, R). Null unless both sides were measured in a frontal view."
+        }
+      },
+      "required": [
+        "joint",
+        "side",
+        "unit",
+        "velocity_unit",
+        "items",
+        "symmetry_index_pct"
+      ]
+    },
+    "liftRep": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "end_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "rom_m": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "duration_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "mean_velocity_ms": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_velocity_ms": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "mean_propulsive_velocity_ms": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "time_to_peak_velocity_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_acceleration_ms2": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "mean_force_n": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_force_n": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "work_j": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "mean_power_w": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "peak_power_w": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "path_deviation_m": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "lowering_time_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "system_work_j": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "system_mean_power_w": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "system_peak_power_w": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "bar_source": {
+          "enum": [
+            "plate",
+            "hands",
+            null
+          ],
+          "description": "Where the bar position came from during this rep: a tracked plate, or an estimate from the hands."
+        }
+      },
+      "required": [
+        "n",
+        "start_s",
+        "end_s",
+        "rom_m",
+        "duration_s",
+        "mean_velocity_ms",
+        "peak_velocity_ms",
+        "mean_propulsive_velocity_ms",
+        "time_to_peak_velocity_s",
+        "peak_acceleration_ms2",
+        "mean_force_n",
+        "peak_force_n",
+        "work_j",
+        "mean_power_w",
+        "peak_power_w",
+        "path_deviation_m",
+        "lowering_time_s",
+        "system_work_j",
+        "system_mean_power_w",
+        "system_peak_power_w",
+        "bar_source"
+      ],
+      "description": "Values describe the bar, not the lifter, unless named system_*."
+    },
+    "lift": {
+      "type": "object",
+      "properties": {
+        "lift": {
+          "type": "string"
+        },
+        "load_kg": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "body_mass_kg": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "reps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/liftRep"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "lift",
+        "load_kg",
+        "body_mass_kg",
+        "reps",
+        "warnings"
+      ]
+    },
+    "jumpItem": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "takeoff_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "landing_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "flight_time_s": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "height_flight_m": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "height_resolution_m": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "height_com_m": {
+          "$ref": "#/$defs/nullableNumber"
+        }
+      },
+      "required": [
+        "n",
+        "takeoff_s",
+        "landing_s",
+        "flight_time_s",
+        "height_flight_m",
+        "height_resolution_m",
+        "height_com_m"
+      ]
+    },
+    "jump": {
+      "type": "object",
+      "properties": {
+        "jumps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jumpItem"
+          }
+        }
+      },
+      "required": [
+        "jumps"
+      ]
+    }
+  }
+}
