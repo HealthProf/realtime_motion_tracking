@@ -1,24 +1,23 @@
 // Trial results: processing, summary tables, plots, repetition / symmetry / jump analysis,
 // the filtering teaching tool, and exports.
-import { detectJumps } from '../analysis/jump';
-import { detectReps, peakAbs, rangeOf, symmetryIndex, type Rep } from '../analysis/reps';
+import { peakAbs, rangeOf, symmetryIndex, type Rep } from '../analysis/reps';
 import { residualAnalysis } from '../analysis/residual';
+import { jumpsFor, liftFor, modeReportFor, repsFor, trialView } from '../capture/analysis';
 import { landmarksCsv, processedCsv, sessionJson } from '../capture/csv';
+import { summaryJson, summaryResultsFor } from '../capture/summary';
 import { download, stamp, textBlob } from '../capture/media';
 import { processTrial, type Processed, type ProcessOptions } from '../capture/process';
 import type { Trial } from '../capture/trial';
-import { bodyYaw, classifyView } from '../coach/coach';
 import { filtfiltGaps } from '../kinematics/butterworth';
-import { derivative, median, secondDerivative } from '../kinematics/series';
-import { analyseLift, KG_PER_LB, LIFTS, type LiftAnalysis } from '../lift/metrics';
+import { derivative, secondDerivative } from '../kinematics/series';
+import { KG_PER_LB, LIFTS, type LiftAnalysis } from '../lift/metrics';
 import { ANGLE_BY_ID } from '../measure/definitions';
-import { L, POINT_LABELS, type PointId } from '../pose/landmarks';
-import { bikeFrontReport, bikeSideReport, type ModeInputs } from '../modes/bike';
+import { POINT_LABELS, type PointId } from '../pose/landmarks';
+import type { ModeInputs } from '../modes/bike';
 import { reportCsv, STATUS_TEXT, type ModeReport } from '../modes/report';
-import { runBackReport, runSideReport } from '../modes/run';
 import { PRESET_BY_ID } from '../presets/presets';
 import { drawChart, legendHtml, PALETTE, type Series } from '../render/chart';
-import { $, esc, f, say, settings } from '../state';
+import { $, esc, f, linked, say, settings } from '../state';
 
 interface Current {
   trial: Trial;
@@ -41,6 +40,18 @@ const options = (): ProcessOptions => ({
 });
 
 export const hasTrial = () => !!cur;
+
+const modeInputs = (): ModeInputs => ({
+  cutoff: settings.cutoff, minVisibility: settings.minVisibility, bodyModel: settings.bodyModel,
+  inseamCm: Number.isFinite(settings.inseamCm) ? settings.inseamCm : undefined, saddleCm: Number.isFinite(settings.saddleCm) ? settings.saddleCm : undefined,
+  speedKmh: Number.isFinite(settings.speedKmh) ? settings.speedKmh : undefined,
+});
+
+function downloadSummary(): void {
+  if (!cur) return;
+  const results = summaryResultsFor(cur.trial, cur.processed, cur.opts, modeInputs(), linked.context);
+  download(textBlob(summaryJson(cur.trial, results), 'application/json'), `${cur.name}-summary.json`);
+}
 
 export function showTrial(trial: Trial, video: Blob | null, videoExt: string): void {
   try {
@@ -149,10 +160,6 @@ function renderChart(): void {
   $('res-legend').innerHTML = legendHtml(series);
 }
 
-function trialView(trial: Trial): ReturnType<typeof classifyView> {
-  return classifyView(median(trial.frames.map((fr) => bodyYaw(fr.world))));
-}
-
 function renderAll(): void {
   if (!cur) return;
   const { trial, processed: p, opts: o } = cur;
@@ -227,14 +234,9 @@ function renderLift(): void {
   const el = $('res-lift');
   if (!cur) return;
   const { trial, processed: p } = cur;
-  const lm = trial.meta.lift, u = p.lengthUnit;
-  const by = p.col.get(`bar_y_${u}`), bx = p.col.get(`bar_x_${u}`);
-  if (!lm && !by) { el.innerHTML = ''; return; }
-  if (!by || !bx) { el.innerHTML = '<p class="warnings">Weight lifting report not produced: the bar was not located in this trial.</p>'; return; }
-  if (u !== 'm') { el.innerHTML = '<p class="warnings">Weight lifting report not produced: the trial was not calibrated, so velocity, force, work and power cannot be given in real units.</p>'; return; }
-  if (!lm || !(lm.loadKg > 0)) { el.innerHTML = '<p class="warnings">Weight lifting report not produced: no load was entered for this trial.</p>'; return; }
-  const sysY = p.col.get('system_com_y_m');
-  const a = analyseLift({ fs: p.fs, x: bx, y: by, massKg: lm.loadKg, system: sysY && lm.bodyMassKg ? { y: sysY, massKg: lm.bodyMassKg + lm.loadKg } : null });
+  const lm = trial.meta.lift;
+  const { value: a, problem } = liftFor(trial, p);
+  if (!a || !lm) { el.innerHTML = problem ? `<p class="warnings">${esc(problem)}</p>` : ''; return; }
   liftReport = a;
   const lift = LIFTS.find((l) => l.id === lm.lift) ?? LIFTS[LIFTS.length - 1];
   const warn = a.warnings.length ? `<ul class="warnings">${a.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
@@ -274,23 +276,8 @@ function renderMode(): void {
   const mode = preset?.analysis.includes('bike') ? 'bike' : preset?.analysis.includes('run') ? 'run' : null;
   const el = $('res-mode');
   if (!mode) { el.innerHTML = ''; return; }
-  const view = trialView(trial);
-  if (view !== 'sagittal' && view !== 'frontal') {
-    el.innerHTML = `<p class="warnings">The ${mode === 'bike' ? 'bike fit' : 'running'} report was not produced: the camera view was ${view === 'oblique' ? 'oblique' : 'not recognisable'}. Record square-on from the side, or directly from the ${mode === 'bike' ? 'front' : 'back'}.</p>`;
-    return;
-  }
-  const inp: ModeInputs = {
-    cutoff: settings.cutoff, minVisibility: settings.minVisibility, bodyModel: settings.bodyModel,
-    inseamCm: Number.isFinite(settings.inseamCm) ? settings.inseamCm : undefined, saddleCm: Number.isFinite(settings.saddleCm) ? settings.saddleCm : undefined,
-    speedKmh: Number.isFinite(settings.speedKmh) ? settings.speedKmh : undefined,
-  };
-  let r: ModeReport;
-  try {
-    r = mode === 'bike' ? (view === 'sagittal' ? bikeSideReport(trial, inp) : bikeFrontReport(trial, inp)) : view === 'sagittal' ? runSideReport(trial, inp) : runBackReport(trial, inp);
-  } catch (err) {
-    el.innerHTML = `<p class="warnings">${esc((err as Error).message)}</p>`;
-    return;
-  }
+  const { value: r, problem } = modeReportFor(trial, modeInputs());
+  if (!r) { el.innerHTML = problem ? `<p class="warnings">${esc(problem)}</p>` : ''; return; }
   modeReport = r;
   const key = `${r.mode}:${r.view}`;
   const prev = previousReports.get(key);
@@ -319,12 +306,10 @@ const modeLines = (): string[] => (modeReport ? reportCsv(modeReport).trim().spl
 function renderReps(): void {
   if (!cur) return;
   const { processed: p, opts: o } = cur;
-  const preset = PRESET_BY_ID.get(cur.trial.meta.preset);
-  const jointAngles = o.angles.filter((id) => ANGLE_BY_ID.get(id)?.kind === 'joint');
-  const id = (preset?.repJoint && jointAngles.find((a) => a.endsWith(`_${preset.repJoint}`))) || jointAngles[0];
+  const found = repsFor(p, o, cur.trial.meta.preset);
   cur.reps = [];
-  if (!id) { $('res-reps').innerHTML = ''; return; }
-  const reps = detectReps(p.col.get(`${id}_deg`)!, p.col.get(`${id}_vel_deg_s`)!, p.fs, 15);
+  if (!found) { $('res-reps').innerHTML = ''; return; }
+  const { angleId: id, reps } = found;
   cur.reps = reps;
   if (!reps.length) { $('res-reps').innerHTML = `<p class="muted">No repetitions detected on ${esc(angleLabel(id))} (needs an excursion of at least 15° that returns to the start).</p>`; return; }
   const mean = (k: (r: Rep) => number) => reps.reduce((s, r) => s + k(r), 0) / reps.length;
@@ -359,19 +344,13 @@ function renderJump(): void {
   const { trial, opts: o } = cur;
   const preset = PRESET_BY_ID.get(trial.meta.preset);
   if (!preset?.analysis.includes('jump')) { $('res-jump').innerHTML = ''; return; }
-  const jp = processTrial(trial, { ...o, angles: [], points: ['l_toe', 'r_toe', 'com'], include3d: false });
-  const u = jp.lengthUnit;
-  const lt = jp.col.get(`l_toe_y_${u}_raw`)!, rt = jp.col.get(`r_toe_y_${u}_raw`)!;
-  const foot = lt.map((v, i) => (Number.isFinite(v) && Number.isFinite(rt[i]) ? Math.min(v, rt[i]) : Number.isFinite(v) ? v : rt[i]));
-  const shank = median(trial.frames.map((fr) => (fr.lm ? Math.hypot(fr.lm[L.l_knee].x - fr.lm[L.l_ankle].x, fr.lm[L.l_knee].y - fr.lm[L.l_ankle].y) : NaN)));
-  const threshold = u === 'm' ? 0.02 : 0.05 * shank;
-  const jumps = detectJumps(jp.t, foot, threshold, jp.col.get(`com_y_${u}`), u === 'm');
+  const { jumps, fs: jumpFs } = jumpsFor(trial, o);
   if (!jumps.length) { $('res-jump').innerHTML = '<p class="muted">No flight phase detected. Both feet must clearly leave the ground and stay in view.</p>'; return; }
   $('res-jump').innerHTML = `<div class="table-wrap"><table><caption>Vertical jump. Flight-time height = g t² / 8 (needs no calibration; assumes the same body position at take-off and landing).</caption>
     <thead><tr><th scope="col">Jump</th><th scope="col">Take-off (s)</th><th scope="col">Flight time (ms)</th><th scope="col">Height, flight time (cm)</th><th scope="col">Timing resolution (cm)</th><th scope="col">Height, centre of mass rise (cm)</th></tr></thead><tbody>
     ${jumps.map((j, i) => `<tr><td>${i + 1}</td><td>${f(j.takeoff, 2)}</td><td>${f(j.flightTime * 1000, 0)}</td><td>${f(j.heightFlight * 100)}</td><td>±${f(j.heightResolution * 100)}</td><td>${Number.isFinite(j.heightCom) ? f(j.heightCom * 100) : 'needs calibration'}</td></tr>`).join('')}
     </tbody></table></div>
-    <p class="muted">The two methods differ for real reasons: flight time is limited by the frame interval (${f(1000 / jp.fs, 0)} ms here) and is inflated by landing with bent knees; the centre-of-mass method depends on calibration, filtering and the body-segment model.</p>`;
+    <p class="muted">The two methods differ for real reasons: flight time is limited by the frame interval (${f(1000 / jumpFs, 0)} ms here) and is inflated by landing with bent knees; the centre-of-mass method depends on calibration, filtering and the body-segment model.</p>`;
 }
 
 // ---- Teaching tool -------------------------------------------------------------------------
@@ -461,6 +440,7 @@ export function initResults(): void {
   $('btn-csv').addEventListener('click', () => cur && download(textBlob(processedCsv(cur.trial, cur.processed, cur.opts, $<HTMLInputElement>('chk-csv-meta').checked, [...modeLines(), ...liftLines()]), 'text/csv'), `${cur.name}-kinematics.csv`));
   $('btn-raw').addEventListener('click', () => cur && download(textBlob(landmarksCsv(cur.trial), 'text/csv'), `${cur.name}-landmarks.csv`));
   $('btn-session').addEventListener('click', () => cur && download(textBlob(sessionJson(cur.trial), 'application/json'), `${cur.name}-session.json`));
+  $('btn-summary').addEventListener('click', downloadSummary);
   $('btn-video-dl').addEventListener('click', () => cur?.video && download(cur.video, `${cur.name}.${cur.videoExt}`));
   let resizeTimer = 0;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = window.setTimeout(() => { renderChart(); renderTeaching(); }, 150); });

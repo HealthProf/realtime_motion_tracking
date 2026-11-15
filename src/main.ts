@@ -11,7 +11,8 @@ import { parseSession } from './capture/csv';
 import { canvasPng, download, stamp, VideoRecorder } from './capture/media';
 import { clampDelay, delayWidth, pickDelayed } from './capture/delay';
 import { ReplayBuffer, ReplayPlayer, type ReplayEntry } from './capture/replay';
-import { storeFrame, TrialRecorder, type Trial, type TrialMeta } from './capture/trial';
+import { newTrialId, storeFrame, TrialRecorder, type Trial, type TrialMeta } from './capture/trial';
+import { describeContext, parseUrlParams, type UrlParams } from './capture/urlParams';
 import { frameRate, resample, uniformGrid } from './kinematics/series';
 import { PlateTracker, type CircleHit } from './lift/circle';
 import { drawLiftScene, makeGrab } from './lift/grab';
@@ -26,7 +27,7 @@ import { syntheticBar, syntheticFrame, SYNTH, type SyntheticActivity } from './p
 import { PRESETS, PRESET_BY_ID, resolvePreset } from './presets/presets';
 import { drawChart, legendHtml, PALETTE, type ChartOptions, type Series } from './render/chart';
 import { drawScene, SIDE_COLOR } from './render/overlay';
-import { $, cal, esc, f, isMobile, layers, say, settings } from './state';
+import { $, cal, esc, f, isMobile, layers, linked, say, settings } from './state';
 import type { BarObs, Lm, ModelTier, PoseFrame, TimestampSource } from './types';
 import { hasTrial, initResults, reprocess, showTrial } from './ui/results';
 
@@ -730,7 +731,7 @@ async function analyseVideo(): Promise<void> {
   updateVideoBar();
   if (cancelled) { say('Analysis cancelled.'); return; }
   if (frames.length < 5) { say('Fewer than 5 frames could be read from that part of the video.'); return; }
-  showTrial({ meta, frames, marks: [] }, null, '');
+  showTrial({ id: newTrialId(), meta, frames, marks: [] }, null, '');
 }
 
 // ---- Trials ------------------------------------------------------------------------------------
@@ -1181,7 +1182,7 @@ function playReplay(): void {
 function replayToTrial(): void {
   if (!rp) return;
   const t0 = rp.entries[0].frame.t;
-  const trial: Trial = { meta: buildMeta(), frames: rp.entries.map((e) => storeFrame(e.frame, t0)), marks: [] };
+  const trial: Trial = { id: newTrialId(), meta: buildMeta(), frames: rp.entries.map((e) => storeFrame(e.frame, t0)), marks: [] };
   exitReplay();
   showTrial(trial, null, '');
 }
@@ -1512,6 +1513,21 @@ function initTilt(): void {
   });
 }
 
+/** Pre-fills the page from a link's validated parameters and shows them before anything is recorded. */
+function applyLink(link: UrlParams): void {
+  if (link.preset) { settings.preset = link.preset; $<HTMLSelectElement>('preset').value = link.preset; applyPreset(true); }
+  if (link.lift) { settings.lift = link.lift; $<HTMLSelectElement>('lift-type').value = link.lift; }
+  if (link.loadKg) { settings.liftUnit = 'kg'; settings.liftLoadKg = link.loadKg; $<HTMLSelectElement>('lift-unit').value = 'kg'; $<HTMLInputElement>('lift-load').value = String(link.loadKg); }
+  if (link.bodyMassKg) { settings.bodyMassKg = link.bodyMassKg; $<HTMLInputElement>('body-mass').value = String(link.bodyMassKg); }
+  if (link.inseamCm) { settings.inseamCm = link.inseamCm; $<HTMLInputElement>('inseam').value = String(link.inseamCm); }
+  if (link.saddleCm) { settings.saddleCm = link.saddleCm; $<HTMLInputElement>('saddle').value = String(link.saddleCm); }
+  linked.context = link.context ?? null;
+  const line = $('linked-context');
+  line.textContent = linked.context ? `Linked from another app: ${describeContext(linked.context)}. These are saved in the summary export.` : '';
+  line.hidden = !linked.context;
+  updateTeachStatus();
+}
+
 function init(): void {
   buildSelectionUi();
   initLayers();
@@ -1625,6 +1641,7 @@ function init(): void {
 
   drawScene(ctx, { w: canvas.width, h: canvas.height, bg: null, mirrorBg: false, sample: null, layers, angles: [], minVisibility: 0.5, calibration: cal.current, mirrored: false, trails: new Map(), picks: [], hud: [], recording: false, time: null });
   const q = new URLSearchParams(location.search);
+  applyLink(parseUrlParams(q));
   const demo = q.get('demo');
   if (demo === 'squat' || demo === 'jump' || demo === 'raise' || demo === 'cycle' || demo === 'run' || demo === 'lift') void startDemo(demo);
   else if (q.get('autostart') === 'camera') void startCamera();

@@ -176,6 +176,7 @@
           <label class="inline"><input type="checkbox" id="chk-csv-meta" checked> include methods header</label>
           <button id="btn-raw">Raw landmarks CSV</button>
           <button id="btn-session">Session file</button>
+          <button id="btn-summary" title="The computed results of this trial as a small JSON file, without landmarks or video">Summary (.json)</button>
           <button id="btn-video-dl" hidden>Video</button>
         </div>
       </section>
@@ -240,6 +241,7 @@
       <details open>
         <summary>Activity and measurements</summary>
         <div class="fields">
+          <p id="linked-context" class="muted" hidden></p>
           <label>Activity <select id="preset"></select></label>
           <p id="preset-guidance" class="muted"></p>
           <div id="mode-bike" class="fields" hidden>
