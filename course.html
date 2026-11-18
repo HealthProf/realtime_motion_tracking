@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Course video analysis projects: capture snapshots, draw and write on them, compare two clips side by side, and export your work.">
+  <meta name="theme-color" content="#0b1220">
+  <title>Course Projects</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/src/course/course.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <a class="back-home" href="./" title="Back to the start page">&larr; Start</a>
+    <h1 id="course-title">Course projects</h1>
+    <span class="chips">
+      <span class="chip" id="student-chip" hidden></span>
+      <span class="chip" id="save-chip" hidden></span>
+    </span>
+  </header>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <main id="main" tabindex="-1">
+    <!-- Code entry -->
+    <section id="gate" class="screen narrow" aria-labelledby="gate-h">
+      <h2 id="gate-h">Enter your course code</h2>
+      <p class="muted">Your instructor gives you this code. It unlocks the course videos and project tools on this device.</p>
+      <form id="gate-form" autocomplete="off">
+        <label for="gate-code">Course code</label>
+        <input id="gate-code" type="text" autocapitalize="none" spellcheck="false" required>
+        <label class="inline"><input type="checkbox" id="gate-remember" checked> Remember the code on this device</label>
+        <button type="submit" class="primary" id="gate-open">Open course</button>
+        <p id="gate-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- Project home -->
+    <section id="home" class="screen" hidden aria-labelledby="home-h">
+      <div class="home-grid">
+        <div>
+          <h2 id="home-h"></h2>
+          <p id="home-instructions" class="muted"></p>
+          <div id="project-pick" class="field" hidden>
+            <label for="project-select">Project</label>
+            <select id="project-select"></select>
+          </div>
+          <div class="field">
+            <label for="student-name">Your name (printed on your exports)</label>
+            <input id="student-name" type="text" autocomplete="name" placeholder="First and last name">
+          </div>
+          <fieldset id="pair-pick" class="field">
+            <legend>Clips</legend>
+            <div id="pair-options"></div>
+            <p id="pair-note" class="muted"></p>
+          </fieldset>
+          <h3>Your work</h3>
+          <ul id="analysis-list" class="cards"></ul>
+        </div>
+        <aside class="card side-help" aria-labelledby="home-help-h">
+          <h3 id="home-help-h">How it works</h3>
+          <ol class="steps">
+            <li>Choose your pair of clips.</li>
+            <li>Open an analysis. Scrub the clip to a moment and press <b>Capture snapshot</b>.</li>
+            <li>Draw and write on the snapshot with the tools. Name it and pick the prompt it answers.</li>
+            <li>For the comparison, line both clips up at the same moment and press <b>Lock</b>, then write over the playing videos.</li>
+            <li>Export a PDF (snapshots) or a video (comparison) and upload it to your course site.</li>
+          </ol>
+          <p class="muted">Your work saves on this device as you go. Nothing is uploaded. Download a backup to move it to another device.</p>
+          <div class="row wrap">
+            <button id="btn-backup">Download backup</button>
+            <label class="button">Restore backup<input type="file" id="file-backup" accept=".json,application/json" hidden></label>
+          </div>
+          <p class="row"><button id="btn-forget" class="quiet">Forget the course code on this device</button></p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Snapshot analysis -->
+    <section id="work" class="screen" hidden aria-labelledby="work-h">
+      <div class="work-head">
+        <button id="work-back" class="quiet">&larr; All work</button>
+        <h2 id="work-h"></h2>
+        <span class="grow"></span>
+        <button id="btn-pdf" class="primary">Export PDF</button>
+      </div>
+      <p id="work-instructions" class="muted"></p>
+      <div class="work-grid">
+        <div class="stage-col">
+          <div id="clip-missing" class="card" hidden>
+            <p id="clip-missing-text"></p>
+            <label class="button primary">Choose video file<input type="file" id="file-clip" accept="video/*" hidden></label>
+          </div>
+          <div id="video-pane" hidden>
+            <div class="stage"><video id="clip" playsinline muted preload="auto"></video></div>
+            <div id="clip-bar" class="bar" role="group" aria-label="Video controls"></div>
+            <div class="row wrap capture-row">
+              <button id="btn-capture" class="primary" aria-keyshortcuts="C">Capture snapshot <kbd>C</kbd></button>
+              <span class="muted small">Space plays and pauses. Left and right arrows step one frame.</span>
+            </div>
+          </div>
+          <div id="edit-pane" hidden>
+            <div class="toolbar" id="snap-tools" role="toolbar" aria-label="Drawing tools"></div>
+            <div class="stage edit-stage"><canvas id="snap-canvas" role="img" aria-label="Snapshot with your drawings"></canvas></div>
+            <div class="row wrap">
+              <button id="btn-back-video">&larr; Back to the video</button>
+              <span class="muted small" id="snap-time"></span>
+            </div>
+          </div>
+        </div>
+        <aside class="side-col">
+          <div id="snap-props" class="card" hidden>
+            <h3>This snapshot</h3>
+            <label>Name <input id="snap-name" type="text"></label>
+            <label>Prompt it answers <select id="snap-prompt"></select></label>
+            <p id="snap-prompt-detail" class="muted small"></p>
+            <div class="row wrap">
+              <button id="snap-up" title="Move earlier in the list">Move up</button>
+              <button id="snap-down" title="Move later in the list">Move down</button>
+              <button id="snap-delete" class="danger">Delete snapshot</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Prompts</h3>
+            <ul id="prompt-list" class="checklist"></ul>
+          </div>
+          <div class="card">
+            <h3>Snapshots</h3>
+            <ol id="snap-list" class="snaps"></ol>
+            <p id="snap-empty" class="muted small">None yet. Scrub to a moment and press Capture snapshot.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Comparison -->
+    <section id="compare" class="screen" hidden aria-labelledby="cmp-h">
+      <div class="work-head">
+        <button id="cmp-back" class="quiet">&larr; All work</button>
+        <h2 id="cmp-h"></h2>
+        <span class="grow"></span>
+        <button id="btn-export-video" class="primary">Export video</button>
+      </div>
+      <p id="cmp-instructions" class="muted"></p>
+      <div class="work-grid">
+        <div class="stage-col">
+          <div id="cmp-missing" class="card" hidden>
+            <p>Choose the two clips to compare.</p>
+            <div class="row wrap">
+              <label class="button">Clip 1 file<input type="file" id="file-cmp-1" accept="video/*" hidden></label>
+              <label class="button">Clip 2 file<input type="file" id="file-cmp-2" accept="video/*" hidden></label>
+            </div>
+          </div>
+          <div id="cmp-pane" hidden>
+            <div class="toolbar" id="cmp-tools" role="toolbar" aria-label="Drawing tools"></div>
+            <div class="stage edit-stage"><canvas id="cmp-canvas" role="img" aria-label="Both clips side by side with your text and drawings"></canvas></div>
+            <div id="cmp-free" class="sync-free">
+              <div class="bar" id="cmp-bar-1" role="group" aria-label="Clip 1 controls"></div>
+              <div class="bar" id="cmp-bar-2" role="group" aria-label="Clip 2 controls"></div>
+              <p class="muted small">Move each clip to the same moment (for example the first critical movement), then lock them together.</p>
+              <button id="btn-lock" class="primary">Lock clips together</button>
+            </div>
+            <div id="cmp-locked" hidden>
+              <div class="bar" id="cmp-bar-sync" role="group" aria-label="Synced controls"></div>
+              <div class="row wrap">
+                <button id="btn-unlock">Unlock to re-align</button>
+                <span class="muted small">Space plays and pauses. Left and right arrows step one frame.</span>
+              </div>
+            </div>
+            <video id="cmp-v1" class="offscreen" playsinline muted preload="auto" aria-hidden="true"></video>
+            <video id="cmp-v2" class="offscreen" playsinline muted preload="auto" aria-hidden="true"></video>
+          </div>
+        </div>
+        <aside class="side-col">
+          <div class="card">
+            <h3>Prompts</h3>
+            <ul id="cmp-prompts" class="checklist"></ul>
+          </div>
+          <div class="card">
+            <h3>Text and drawings over the video</h3>
+            <p class="muted small">Each item shows from its start time to its end time (clip 1 time). New items start at the current moment.</p>
+            <ol id="cmp-items" class="items"></ol>
+            <p id="cmp-items-empty" class="muted small">None yet. Lock the clips, pause where you want to explain something, and add text.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="busy" class="busy" hidden role="dialog" aria-modal="true" aria-labelledby="busy-text">
+    <div class="busy-box"><p id="busy-text"></p><progress id="busy-progress" max="1"></progress><button id="busy-cancel" hidden>Cancel</button></div>
+  </div>
+  <script type="module" src="/src/course/main.ts"></script>
+</body>
+</html>

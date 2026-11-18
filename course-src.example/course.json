@@ -1,0 +1,61 @@
+{
+  "id": "example-course-fall",
+  "title": "Biomechanics (example course)",
+  "labels": { "snapshot": "Snapshot", "analysis": "Analysis" },
+  "projects": [
+    {
+      "id": "p1",
+      "short": "P1",
+      "title": "Project 1: Video analysis",
+      "instructions": "Choose one pair of clips from the same sport. Analysis 1 uses clip 1, Analysis 2 uses clip 2, and Analysis 3 compares both side by side. Use text and a variety of drawing tools.",
+      "analyses": [
+        {
+          "id": "a1",
+          "title": "Analysis 1",
+          "kind": "snapshots",
+          "clip": 1,
+          "points": 30,
+          "drawing": "required",
+          "instructions": "One example of each. You must draw to show mastery.",
+          "prompts": [
+            { "id": "friction", "title": "Friction", "points": 10, "detail": "When, where, what. Is it a good thing or a bad thing for the athlete?" },
+            { "id": "gravity", "title": "Gravity", "points": 10, "detail": "When, where, what. How does this affect performance in this moment?" },
+            { "id": "ssc", "title": "Stretch-shortening cycle", "points": 10, "detail": "What is stretching and shortening, when and where. Why do they do it?" }
+          ]
+        },
+        {
+          "id": "a2",
+          "title": "Analysis 2",
+          "kind": "snapshots",
+          "clip": 2,
+          "points": 60,
+          "drawing": "required",
+          "instructions": "Two examples of each. You must draw to show mastery.",
+          "prompts": [
+            { "id": "muscles", "title": "Muscles", "points": 20, "detail": "Motion or action, then the agonist and antagonist. Use anatomical (Latin) names." },
+            { "id": "joints", "title": "Joints", "points": 20, "detail": "Location, then the type of joint or its classification. Plain language is fine." },
+            { "id": "planes", "title": "Planes and axes", "points": 20, "detail": "Motion or action, then the plane it happens in and the axis it rotates about." }
+          ]
+        },
+        {
+          "id": "a3",
+          "title": "Analysis 3",
+          "kind": "compare",
+          "points": 10,
+          "drawing": "optional",
+          "instructions": "Put the two clips side by side and lock them together at the first critical movement. Then write over the playing videos (text required, drawing optional).",
+          "prompts": [
+            { "id": "sync", "title": "Side by side and synced", "points": 5, "detail": "Both clips side by side, locked together from the start." },
+            { "id": "observation", "title": "Relevant observation", "points": 5, "detail": "Something from class not yet covered in this project. Ideas: rigid body mechanics, length, weight, mass, inertia, levers, concentric, eccentric and isometric actions, kinetic chain checkpoints, open and closed kinetic chains, paths of motion." }
+          ]
+        }
+      ]
+    }
+  ],
+  "videos": [
+    { "id": "swim1", "title": "Swimming, clip 1", "group": "Swimming", "clip": 1, "file": "swim1.mp4" },
+    { "id": "swim2", "title": "Swimming, clip 2", "group": "Swimming", "clip": 2, "file": "swim2.mp4" },
+    { "id": "tennis1", "title": "Tennis, clip 1", "group": "Tennis", "clip": 1, "file": "tennis1.mp4" },
+    { "id": "tennis2", "title": "Tennis, clip 2", "group": "Tennis", "clip": 2, "file": "tennis2.mp4" }
+  ]
+}
