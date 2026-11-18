@@ -14,7 +14,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // The encrypted course pack and its videos change without an app update (new code, new clips), and the
+  // videos are large: always fetch them from the network.
+  if (/\/course\/(pack\.json|v\/)/.test(url.pathname)) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
     const put = (res) => { if (res.ok && res.status === 200) cache.put(req, res.clone()); return res; };

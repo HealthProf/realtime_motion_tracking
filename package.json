@@ -2,7 +2,7 @@
   "name": "realtime-motion-tracking",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "assets": "node scripts/fetch-assets.mjs",
@@ -10,10 +10,13 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "node tests/e2e/smoke.cjs"
+    "e2e": "node tests/e2e/smoke.cjs",
+    "pack": "node scripts/pack-course.mjs",
+    "e2e:course": "node tests/e2e/course.cjs"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "^1.2.3"
+    "@mediapipe/tasks-vision": "^1.2.3",
+    "jspdf": "4.2.1"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

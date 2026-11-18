@@ -7,7 +7,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const assert = require('node:assert');
 
-const PORT = 4174, URL = `http://localhost:${PORT}/`;
+const PORT = 4174, URL = `http://localhost:${PORT}/lab.html`;
 const fake = process.env.FAKE_VIDEO;
 
 (async () => {

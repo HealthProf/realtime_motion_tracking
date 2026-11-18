@@ -4,3 +4,4 @@ public/models/
 public/wasm/
 test-results/
 *.log
+course-src/
