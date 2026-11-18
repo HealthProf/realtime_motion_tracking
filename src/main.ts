@@ -9,10 +9,11 @@ import { findExtrema } from './modes/cycles';
 import { closeCamera, listCameras, openCamera, startFrameLoop, type OpenCamera } from './camera/camera';
 import { parseSession } from './capture/csv';
 import { canvasPng, download, stamp, VideoRecorder } from './capture/media';
+import { clock, measureFileFps, once, seekFrame } from './capture/videoFile';
 import { clampDelay, delayWidth, pickDelayed } from './capture/delay';
 import { ReplayBuffer, ReplayPlayer, type ReplayEntry } from './capture/replay';
 import { storeFrame, TrialRecorder, type Trial, type TrialMeta } from './capture/trial';
-import { frameRate, resample, uniformGrid } from './kinematics/series';
+import { resample, uniformGrid } from './kinematics/series';
 import { PlateTracker, type CircleHit } from './lift/circle';
 import { drawLiftScene, makeGrab } from './lift/grab';
 import { analyseLift, KG_PER_LB, LIFTS, type LiftRep } from './lift/metrics';
@@ -576,55 +577,7 @@ async function startDemo(activity: SyntheticActivity): Promise<void> {
 
 // ---- Video files -------------------------------------------------------------------------------
 
-type RvfcVideo = HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number };
-const once = (el: EventTarget, type: string) => new Promise<void>((resolve) => el.addEventListener(type, () => resolve(), { once: true }));
-
-/** Frame rate of a file, measured from the timestamps of the frames it presents during a short play. */
-async function measureFileFps(): Promise<number> {
-  const v = video as RvfcVideo;
-  if (!v.requestVideoFrameCallback) return NaN;
-  const times: number[] = [];
-  try { await video.play(); } catch { return NaN; }
-  await new Promise<void>((resolve) => {
-    const t0 = performance.now();
-    const step = (_: number, meta: { mediaTime: number }) => {
-      times.push(meta.mediaTime);
-      if (times.length >= 45 || performance.now() - t0 > 1800 || video.ended) resolve(); else v.requestVideoFrameCallback!(step);
-    };
-    v.requestVideoFrameCallback!(step);
-    setTimeout(resolve, 2600);
-  });
-  video.pause();
-  return frameRate(times);
-}
-
-/**
- * Seeks to time t and resolves with the timestamp of the frame then showing. `tol` is how far (s) a
- * presented frame's own timestamp may be from t and still be the frame asked for: a frame notification
- * that arrives late from an earlier seek must not be mistaken for this one.
- */
-function seekFrame(t: number, tol = Infinity, fallback = t): Promise<number> {
-  return new Promise((resolve) => {
-    const v = video as RvfcVideo;
-    let done = false;
-    const finish = (time: number) => { if (!done) { done = true; clearTimeout(timer); resolve(time); } };
-    const timer = setTimeout(() => finish(fallback), 5000);
-    const onFrame = (_: number, meta: { mediaTime: number }) => {
-      if (done) return;
-      if (!video.seeking && Math.abs(meta.mediaTime - t) <= tol) finish(meta.mediaTime);
-      else v.requestVideoFrameCallback!(onFrame);
-    };
-    const notifies = !!v.requestVideoFrameCallback;
-    if (notifies) v.requestVideoFrameCallback!(onFrame);
-    // Once the seek has completed the frame is available even if the browser sends no notification
-    // (for example when it was already showing); the requested time is then the best timestamp.
-    video.addEventListener('seeked', () => setTimeout(() => finish(fallback), notifies ? 350 : 0), { once: true });
-    video.currentTime = t;
-  });
-}
-
 const fileFps = () => Number($<HTMLInputElement>('video-fps').value);
-const clock = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 
 function updateVideoBar(): void {
   if (source?.kind !== 'video') return;
@@ -651,8 +604,8 @@ async function startVideo(file: File): Promise<void> {
     const loaded = Promise.race([once(video, 'loadeddata'), once(video, 'error').then(() => { throw new Error('This browser cannot play that video. Phone clips saved as HEVC (.mov) often need converting to H.264 MP4 first.'); })]);
     await Promise.all([landmarker.load(), loaded]);
     if (!video.videoWidth) throw new Error('The file has no video track this browser can decode.');
-    const fps = await measureFileFps();
-    await seekFrame(0);
+    const fps = await measureFileFps(video);
+    await seekFrame(video, 0);
     $<HTMLInputElement>('video-fps').value = Number.isFinite(fps) ? String(Math.round(fps * 100) / 100) : '30';
     $('video-info').textContent = `${file.name}: ${video.videoWidth}x${video.videoHeight}, ${clock(video.duration)} long. ${Number.isFinite(fps) ? `Measured ${fps.toFixed(2)} frames per second.` : 'The frame rate could not be measured: enter it above.'} If the clip was filmed in slow motion, set the factor so times and velocities are real.`;
     vid.in = vid.out = null;
@@ -669,7 +622,7 @@ async function startVideo(file: File): Promise<void> {
     $<HTMLInputElement>('video-slider').max = String(video.duration);
     setRunning(true);
     updateVideoBar();
-    await seekFrame(Math.min(0.001, video.duration / 2));
+    await seekFrame(video, Math.min(0.001, video.duration / 2));
     say('Video loaded. Play it to watch with live measurements, or press "Analyse every frame" for a full trial with no skipped frames.');
   } catch (err) {
     say(`Could not open the video: ${(err as Error).message}`);
@@ -705,7 +658,7 @@ async function analyseVideo(): Promise<void> {
   for (let i = 0; i < n && !vid.cancel && source === src; i++) {
     // Aim at the middle of each frame so rounding cannot land on a neighbour.
     // If the browser does not report the frame's own timestamp, its start time is the estimate.
-    const shown = await seekFrame(Math.min(video.duration - 1e-3, from + (i + 0.5) / fps), 0.75 / fps, from + i / fps);
+    const shown = await seekFrame(video, Math.min(video.duration - 1e-3, from + (i + 0.5) / fps), 0.75 / fps, from + i / fps);
     if (vid.cancel || source !== src) break;
     if (shown <= last + 1e-5) continue;
     last = shown;

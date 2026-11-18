@@ -18,7 +18,7 @@
 </head>
 <body>
 <main>
-<p><a href="./">&larr; Back to the app</a></p>
+<p><a href="./">&larr; Back to the start page</a> · <a href="lab.html">Motion Lab</a></p>
 <h1>Methods and limitations</h1>
 <p class="note">This is a teaching tool. It has not been validated against laboratory motion capture. Report its numbers as estimates and describe the setup you used.</p>
 
@@ -146,6 +146,14 @@
 <p><strong>What the numbers describe.</strong> These are values for the bar, not for the lifter's body. With body mass entered, "system" work and power use the combined centre of mass of lifter and bar from the segmental model, which is less certain.</p>
 <p><strong>How far to trust them.</strong> Range, time, mean velocity, work and mean power are robust. Peak acceleration, peak force and peak power come from differentiating twice and depend on frame rate and filter cutoff. At 30 frames per second fast lifts (cleans, snatches) are under-sampled and peaks are underestimated; the app warns when this applies. Every value carries the percentage error of the calibration.</p>
 <p><strong>Validation status.</strong> The calculations are checked against synthetic lifts with known answers, and the plate tracker against synthetic images and a synthetic barbell scene. The mode has not yet been compared with a linear position transducer or force plate on real lifts, and the tracker has not been tested on real gym footage.</p>
+
+<h2>Course projects page</h2>
+<p>The course projects page measures nothing automatically: every mark is placed by the student. Two of its tools show numbers, and both carry the planar limits described above.</p>
+<ul>
+<li><strong>Angle tool.</strong> It reports the angle between the two drawn lines as it appears in the picture. It equals the true joint angle only when the movement happens in a plane square to the camera; anywhere else, perspective makes it larger or smaller.</li>
+<li><strong>Synced comparison.</strong> Locking stores one time in each clip that shows the same moment. After that, clip 2 is shown at clip 1's time plus that offset, corrected during playback whenever it drifts by more than one frame. Clips filmed at different frame rates line up to the nearest frame of each clip, not exactly. Slow-motion clips play at their recorded speed, so a 4x slow-motion clip beside a real-time clip will drift apart in real time.</li>
+</ul>
+<p>Plane and axis panels and force arrows are drawings, not detections: their placement is the student's interpretation.</p>
 
 <h2>What published comparisons report</h2>
 <p>Based on articles retrieved from PubMed, studies comparing this family of models with marker-based motion capture report results that depend strongly on the joint, the task and the camera view:</p>
